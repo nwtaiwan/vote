@@ -3,467 +3,629 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>西北社區財務系統</title>
+    <title>QR Code 投票單產生器</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
-        /* 自訂樣式，用於設定面板的顯示和隱藏動畫 */
-        .modal {
-            display: none;
-            transition: opacity 0.3s ease-in-out;
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
         }
-        .modal.active {
-            display: flex;
+        /* --- General UI Styles --- */
+        .section-header {
+            border-bottom: 2px solid #ef4444; /* red-500 */
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #b91c1c; /* red-700 */
         }
-        .modal-content {
-            transform: scale(0.9);
-            transition: transform 0.3s ease-in-out;
+        .option-input-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
         }
-        .modal.active .modal-content {
-            transform: scale(1);
-        }
-        /* 美化捲軸 */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
+
+        /* --- Print Specific Styles --- */
+        @media print {
+            @page {
+                size: A4;
+                margin: 1cm;
+            }
+
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                background-color: #ffffff !important;
+                margin: 0;
+            }
+
+            /* Hide the main application UI when printing */
+            #app {
+                display: none !important;
+            }
+
+            /* Show the print area */
+            #print-area {
+                display: block !important;
+            }
+
+            .print-page {
+                page-break-after: always;
+                position: relative;
+                width: 19cm; /* A4 width - 2cm margins */
+                height: 27.7cm; /* A4 height - 2cm margins */
+                box-sizing: border-box;
+            }
+
+            .print-page:last-child {
+                page-break-after: avoid;
+            }
+            
+            .print-header {
+                text-align: center;
+                margin-bottom: 1rem;
+            }
+            
+            .print-header h1 { font-size: 18pt; font-weight: bold; margin: 0; }
+            .print-header h2 { font-size: 16pt; font-weight: bold; margin: 0; }
+            .print-header p { text-align: right; margin: 0.5rem 0 0 0; }
+
+            .resident-unit-header {
+                position: absolute;
+                top: 0;
+                right: 0;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+
+            .poll-container {
+                margin-top: 1.5rem;
+            }
+            
+            .poll-title {
+                font-size: 14pt;
+                font-weight: bold;
+                margin-bottom: 1rem;
+            }
+
+            .options-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 1rem;
+            }
+
+            .option-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            
+            .option-qr-code {
+                width: 100px;
+                height: 100px;
+                margin-bottom: 0.5rem;
+            }
+
+            .option-text {
+                font-size: 12pt;
+            }
         }
     </style>
 </head>
-<body class="bg-red-600 flex items-center justify-center h-screen font-sans">
+<body class="bg-gray-100 text-gray-800">
 
-    <!-- 主登入畫面 -->
-    <div class="w-full max-w-md p-4 space-y-3 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl text-center">
-        <img src="https://static.wixstatic.com/media/6148f9_56377cef73c1498f95a2c3057b89f2ed~mv2.png" alt="社區Logo" class="w-[120px] h-[60px] mx-auto mb-2">
-        
-        <div class="text-center">
-             <span id="communityNameDisplay" class="block text-[20px] font-bold text-red-600">西北社區</span>
-             <span class="block text-[20px] text-gray-800">財務系統</span>
-        </div>
-        
-        <!-- 登入表單 -->
-        <form id="loginForm" class="space-y-4 text-left">
-            <div>
-                 <div class="flex justify-between items-center mb-1">
-                    <label for="username" class="text-base font-medium text-gray-700">帳號</label>
-                    <div class="flex items-center text-base">
-                        <input id="rememberMe" name="rememberMe" type="checkbox" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
-                        <label for="rememberMe" class="ml-2 text-gray-700">記住帳號</label>
-                    </div>
+    <!-- Main Application UI (will be hidden on print) -->
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+
+        <!-- 1. Settings Section -->
+        <section class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="section-header">基本設定</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="community-name" class="block text-sm font-medium text-gray-700">社區名稱</label>
+                    <input type="text" id="community-name" value="西北社區" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
                 </div>
-                <input id="username" name="username" type="text" required class="text-base block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="請輸入您的帳號">
-            </div>
-            <div>
-                <label for="password" class="text-base font-medium text-gray-700">密碼</label>
-                <div class="relative mt-1">
-                    <input id="password" name="password" type="password" required class="text-base block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 pr-10" placeholder="請輸入您的密碼">
-                    <button type="button" id="togglePasswordVisibility" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 cursor-pointer">
-                        <svg id="eyeIcon" class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                        <svg id="eyeOffIcon" class="h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064 7 9.542 7 .847 0 1.673.124 2.458.352M4.935 4.935l14.13 14.13M10.5 10.5a2.5 2.5 0 003.536 3.536"></path>
-                        </svg>
-                    </button>
+                <div>
+                    <label for="event-name" class="block text-sm font-medium text-gray-700">會議活動名稱</label>
+                    <input type="text" id="event-name" value="113年度區分所有權人會議" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="event-date" class="block text-sm font-medium text-gray-700">投票日期</label>
+                    <input type="date" id="event-date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="polls-per-page" class="block text-sm font-medium text-gray-700">每頁列印議題數量</label>
+                    <input type="number" id="polls-per-page" value="2" min="1" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
                 </div>
             </div>
-            <button type="submit" class="w-full flex justify-center py-2 px-3 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 ease-in-out">
-                登入
+        </section>
+
+        <!-- 2. Polls Management Section -->
+        <section class="bg-white p-6 rounded-lg shadow-md">
+            <div class="flex justify-between items-center">
+                <h2 class="section-header">投票議題管理</h2>
+                <button id="add-poll-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">新增投票</button>
+            </div>
+            <div id="polls-list" class="mt-4 space-y-4">
+                <!-- Polls will be dynamically inserted here -->
+            </div>
+        </section>
+        
+        <!-- 3. Residents List Section -->
+        <section class="bg-white p-6 rounded-lg shadow-md">
+             <div class="flex justify-between items-center">
+                <h2 class="section-header">匯入住戶列表</h2>
+                <div class="flex items-center gap-2">
+                    <input type="file" id="import-csv-input" class="hidden" accept=".csv">
+                    <button id="import-csv-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">從CSV匯入</button>
+                    <button id="clear-residents-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600">清空列表</button>
+                </div>
+            </div>
+             <p class="text-sm text-gray-600 mt-2">
+                請從「西北社區QR Code報到系統」的住戶管理頁面，點擊「匯出CSV」按鈕，然後將下載的檔案從這裡匯入。
+            </p>
+            <div class="mt-4 overflow-x-auto max-h-96">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                                <input type="checkbox" id="select-all-residents" class="h-4 w-4 text-red-600 border-gray-300 rounded">
+                            </th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">序號</th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">戶號</th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地址</th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">坪數</th>
+                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">區分權比例</th>
+                        </tr>
+                    </thead>
+                    <tbody id="residents-list" class="bg-white divide-y divide-gray-200">
+                        <!-- Residents will be dynamically inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 4. Action Button -->
+        <section class="text-center">
+            <button id="generate-print-btn" class="bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:bg-red-700 text-xl transition-transform transform hover:scale-105">
+                產生並列印投票單
             </button>
-        </form>
-        <div id="loginMessage" class="text-center text-red-500 font-medium h-4"></div>
+        </section>
+
     </div>
 
-    <!-- 左下角設定按鈕 -->
-    <button id="settingsButton" class="fixed bottom-0 left-0 w-[10px] h-[10px] bg-transparent cursor-pointer" title="開啟設定"></button>
-    
-    <!-- 設定密碼驗證 Modal -->
-    <div id="settingsPasswordModal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4">
-        <div class="modal-content bg-white rounded-xl shadow-xl w-full max-w-sm">
-            <div class="p-4 border-b">
-                <h2 class="text-xl font-bold text-gray-800">管理員驗證</h2>
-            </div>
-            <div class="p-4">
-                <form id="settingsPasswordForm">
-                    <label for="settingsPassword" class="text-sm font-medium text-gray-700">請輸入管理密碼</label>
-                    <input type="password" id="settingsPassword" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                    <div id="passwordErrorMessage" class="text-red-500 text-sm h-4 mt-1"></div>
-                    <div class="mt-4 flex justify-end space-x-2">
-                         <button type="button" id="closePasswordModalButton" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition">取消</button>
-                        <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition">確認</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- 設定面板 (Modal) -->
-    <div id="settingsModal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4">
-        <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-                <h2 class="text-2xl font-bold text-gray-800">基本設定</h2>
-                <button id="closeModalButton" class="text-gray-400 hover:text-gray-600 transition">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-            
-            <div class="px-6 pb-6 pt-5 flex-grow overflow-y-auto space-y-4">
-                <!-- 訊息提示 -->
-                <div id="settingsMessage" class="mb-2 text-center text-green-600 font-medium h-5"></div>
-
-                 <!-- 社區名稱設定 -->
-                <div class="bg-gray-50 p-4 rounded-lg">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-2">社區名稱設定</h3>
-                    <div class="flex flex-wrap gap-4 items-end">
-                        <div class="flex-grow">
-                            <label for="communityNameInput" class="text-sm font-medium text-gray-700">新名稱</label>
-                            <input type="text" id="communityNameInput" placeholder="例如：西北社區" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
-                        <div class="flex-shrink-0">
-                            <button id="saveCommunityNameButton" class="w-full sm:w-auto flex-shrink-0 px-5 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">儲存名稱</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 帳號管理 -->
-                <div class="bg-gray-50 p-4 rounded-lg">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-2">帳號管理</h3>
-                    
-                    <!-- 新增/編輯帳號表單 -->
-                    <form id="accountForm" class="mb-4 flex flex-wrap gap-4 items-end">
-                        <input type="hidden" id="editUserId">
-                        <div class="flex-grow" style="flex-basis: 12rem;">
-                            <label for="accountUsername" class="text-sm font-medium text-gray-700">帳號</label>
-                            <input type="text" id="accountUsername" placeholder="新帳號" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
-                        <div class="flex-grow" style="flex-basis: 12rem;">
-                            <label for="accountPassword" class="text-sm font-medium text-gray-700">密碼</label>
-                            <input type="text" id="accountPassword" placeholder="新密碼" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
-                        <div class="flex-grow" style="flex-basis: 12rem;">
-                            <label for="accountRedirectUrl" class="text-sm font-medium text-gray-700">代碼</label>
-                            <div class="flex items-center mt-1">
-                                <input type="text" id="accountRedirectUrl" placeholder="請輸入代碼" required class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-2 w-full sm:w-auto">
-                            <button type="submit" id="accountFormSubmitButton" class="w-full sm:w-auto flex-shrink-0 px-5 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition">新增帳號</button>
-                            <button type="button" id="cancelEditButton" class="hidden w-full sm:w-auto flex-shrink-0 px-5 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500 transition">取消編輯</button>
-                        </div>
-                    </form>
-                    
-                    <!-- 帳號列表 -->
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full bg-white border border-gray-200 rounded-lg">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">帳號</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">密碼</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">代碼</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="userList" class="divide-y divide-gray-200">
-                                <!-- 使用 JavaScript 動態填入 -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Print Area (hidden by default) -->
+    <div id="print-area" class="hidden"></div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // DOM 元素
-            const loginForm = document.getElementById('loginForm');
-            const loginMessage = document.getElementById('loginMessage');
-            const usernameInput = document.getElementById('username');
-            const passwordInput = document.getElementById('password');
-            const rememberMeCheckbox = document.getElementById('rememberMe');
-            const togglePasswordVisibilityButton = document.getElementById('togglePasswordVisibility');
-            const eyeIcon = document.getElementById('eyeIcon');
-            const eyeOffIcon = document.getElementById('eyeOffIcon');
-            const communityNameDisplay = document.getElementById('communityNameDisplay');
-            
-            const settingsButton = document.getElementById('settingsButton');
-            const settingsModal = document.getElementById('settingsModal');
-            const closeModalButton = document.getElementById('closeModalButton');
-            
-            const settingsPasswordModal = document.getElementById('settingsPasswordModal');
-            const settingsPasswordForm = document.getElementById('settingsPasswordForm');
-            const settingsPasswordInput = document.getElementById('settingsPassword');
-            const passwordErrorMessage = document.getElementById('passwordErrorMessage');
-            const closePasswordModalButton = document.getElementById('closePasswordModalButton');
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Elements ---
+        const communityNameInput = document.getElementById('community-name');
+        const eventNameInput = document.getElementById('event-name');
+        const eventDateInput = document.getElementById('event-date');
+        const pollsPerPageInput = document.getElementById('polls-per-page');
+        
+        const addPollBtn = document.getElementById('add-poll-btn');
+        const pollsListContainer = document.getElementById('polls-list');
+        
+        const importCsvInput = document.getElementById('import-csv-input');
+        const importCsvBtn = document.getElementById('import-csv-btn');
+        const clearResidentsBtn = document.getElementById('clear-residents-btn');
+        const residentsListTbody = document.getElementById('residents-list');
+        const selectAllResidentsCheckbox = document.getElementById('select-all-residents');
 
-            const settingsMessage = document.getElementById('settingsMessage');
-            const communityNameInput = document.getElementById('communityNameInput');
-            const saveCommunityNameButton = document.getElementById('saveCommunityNameButton');
+        const generatePrintBtn = document.getElementById('generate-print-btn');
+        const printArea = document.getElementById('print-area');
 
-            const accountForm = document.getElementById('accountForm');
-            const accountUsernameInput = document.getElementById('accountUsername');
-            const accountPasswordInput = document.getElementById('accountPassword');
-            const accountRedirectUrlInput = document.getElementById('accountRedirectUrl');
-            const accountFormSubmitButton = document.getElementById('accountFormSubmitButton');
-            const editUserIdInput = document.getElementById('editUserId');
-            const cancelEditButton = document.getElementById('cancelEditButton');
-            const userList = document.getElementById('userList');
+        // --- Data State ---
+        let polls = [];
+        let residents = [];
+        let pollIdCounter = 0;
 
-            // --- 資料管理 ---
-            const USERS_KEY = 'loginSystem_users';
-            const REMEMBERED_USER_KEY = 'loginSystem_rememberedUser';
-            const COMMUNITY_NAME_KEY = 'loginSystem_communityName';
-            const URL_PREFIX = 'https://nwtaiwan.github.io/';
+        // --- Initial Setup ---
+        eventDateInput.valueAsDate = new Date(); // Set today's date
+        addInitialData();
 
-            // 取得使用者資料，若無則初始化
-            let users = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
-            if (users.length === 0) {
-                // 如果是第一次使用，建立一個預設帳號
-                users.push({ 
-                    id: Date.now(), 
-                    username: 'admin', 
-                    password: 'password',
-                    redirectUrl: 'https://nwtaiwan.github.io/default'
-                });
-                saveUsers();
-            }
-
-            function saveUsers() {
-                localStorage.setItem(USERS_KEY, JSON.stringify(users));
-            }
-
-            // --- 社區名稱邏輯 ---
-            function loadCommunityName() {
-                const savedName = localStorage.getItem(COMMUNITY_NAME_KEY) || '西北社區';
-                communityNameDisplay.textContent = savedName;
-                communityNameInput.value = savedName;
-                document.title = savedName + '財務系統';
-            }
-            
-            saveCommunityNameButton.addEventListener('click', () => {
-                const newName = communityNameInput.value.trim();
-                if (newName) {
-                    localStorage.setItem(COMMUNITY_NAME_KEY, newName);
-                    loadCommunityName();
-                    showSettingsMessage('社區名稱已更新！');
-                } else {
-                    showSettingsMessage('社區名稱不能為空！', 'error');
-                }
-            });
-
-            // --- 記住帳號邏輯 ---
-            function loadRememberedUser() {
-                const rememberedUsername = localStorage.getItem(REMEMBERED_USER_KEY);
-                if (rememberedUsername) {
-                    usernameInput.value = rememberedUsername;
-                    rememberMeCheckbox.checked = true;
-                }
-            }
-
-            function handleRememberMe(username) {
-                if (rememberMeCheckbox.checked) {
-                    localStorage.setItem(REMEMBERED_USER_KEY, username);
-                } else {
-                    localStorage.removeItem(REMEMBERED_USER_KEY);
-                }
-            }
-
-            // --- 密碼可視性切換 ---
-            togglePasswordVisibilityButton.addEventListener('click', () => {
-                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-                passwordInput.setAttribute('type', type);
-                eyeIcon.classList.toggle('hidden');
-                eyeOffIcon.classList.toggle('hidden');
-            });
-
-            // --- 登入邏輯 ---
-            loginForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const username = e.target.username.value;
-                const password = e.target.password.value;
-                handleRememberMe(username);
-                const user = users.find(u => u.username === username && u.password === password);
-                if (user) {
-                    loginMessage.textContent = '登入成功！正在跳轉...';
-                    loginMessage.classList.remove('text-red-500');
-                    loginMessage.classList.add('text-green-500');
-                    setTimeout(() => {
-                        window.location.href = user.redirectUrl;
-                    }, 1000);
-                } else {
-                    loginMessage.textContent = '帳號或密碼錯誤！';
-                    loginMessage.classList.remove('text-green-500');
-                    loginMessage.classList.add('text-red-500');
-                }
-            });
-
-            // --- 設定面板 & 密碼驗證邏輯 ---
-            settingsButton.addEventListener('click', () => {
-                settingsPasswordModal.classList.add('active');
-                settingsPasswordInput.focus();
-            });
-
-            function closePasswordModal() {
-                settingsPasswordModal.classList.remove('active');
-                settingsPasswordForm.reset();
-                passwordErrorMessage.textContent = '';
-            }
-            
-            closePasswordModalButton.addEventListener('click', closePasswordModal);
-
-            settingsPasswordForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
-                const day = String(today.getDate()).padStart(2, '0');
-                const correctPassword = `${year}${month}${day}0217`;
-
-                if (settingsPasswordInput.value === correctPassword) {
-                    closePasswordModal();
-                    settingsModal.classList.add('active');
-                    renderUserList();
-                } else {
-                    passwordErrorMessage.textContent = '密碼錯誤！';
-                }
-            });
-            
-            closeModalButton.addEventListener('click', () => {
-                settingsModal.classList.remove('active');
-            });
-
-            // --- 帳號管理邏輯 ---
-            function renderUserList() {
-                userList.innerHTML = '';
-                if(users.length === 0) {
-                    userList.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-500">目前沒有任何帳號</td></tr>`;
-                    return;
-                }
-                users.forEach(user => {
-                    const tr = document.createElement('tr');
-                    const displayUrl = user.redirectUrl.startsWith(URL_PREFIX) 
-                        ? user.redirectUrl.substring(URL_PREFIX.length) 
-                        : user.redirectUrl;
-
-                    tr.innerHTML = `
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHTML(user.username)}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHTML(user.password)}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-xs truncate">
-                            ${escapeHTML(displayUrl)}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
-                            <button class="edit-btn text-indigo-600 hover:text-indigo-900" data-id="${user.id}">編輯</button>
-                            <button class="delete-btn text-red-600 hover:text-red-900" data-id="${user.id}">刪除</button>
-                        </td>
-                    `;
-                    userList.appendChild(tr);
-                });
-            }
-
-            accountForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const username = accountUsernameInput.value.trim();
-                const password = accountPasswordInput.value.trim();
-                const urlSuffix = accountRedirectUrlInput.value.trim();
-                const userId = editUserIdInput.value;
-
-                if (!username || !password || !urlSuffix) {
-                    showSettingsMessage('帳號、密碼和代碼不能為空！', 'error');
-                    return;
-                }
-                
-                const redirectUrl = URL_PREFIX + urlSuffix;
-
-                if (userId) { // 編輯模式
-                    const userIndex = users.findIndex(u => u.id == userId);
-                    if (userIndex > -1) {
-                        if (users.some(u => u.username === username && u.id != userId)) {
-                            showSettingsMessage('此帳號名稱已被使用！', 'error'); return;
-                        }
-                        users[userIndex] = { ...users[userIndex], username, password, redirectUrl };
-                        showSettingsMessage('帳號更新成功！');
-                    }
-                } else { // 新增模式
-                    if (users.some(u => u.username === username)) {
-                        showSettingsMessage('此帳號名稱已被使用！', 'error'); return;
-                    }
-                    users.push({ id: Date.now(), username, password, redirectUrl });
-                    showSettingsMessage('帳號新增成功！');
-                }
-
-                saveUsers();
-                renderUserList();
-                resetAccountForm();
-            });
-            
-            userList.addEventListener('click', (e) => {
-                const target = e.target;
-                const id = target.dataset.id;
-                
-                if (target.classList.contains('edit-btn')) {
-                    const user = users.find(u => u.id == id);
-                    if (user) {
-                        editUserIdInput.value = user.id;
-                        accountUsernameInput.value = user.username;
-                        accountPasswordInput.value = user.password;
-                        let suffix = user.redirectUrl;
-                        if(suffix.startsWith(URL_PREFIX)) {
-                           suffix = suffix.substring(URL_PREFIX.length);
-                        }
-                        accountRedirectUrlInput.value = suffix;
-                        accountFormSubmitButton.textContent = '更新帳號';
-                        accountFormSubmitButton.classList.remove('bg-green-500', 'hover:bg-green-600');
-                        accountFormSubmitButton.classList.add('bg-blue-500', 'hover:bg-blue-600');
-                        cancelEditButton.classList.remove('hidden');
-                        accountUsernameInput.focus();
-                    }
-                } else if (target.classList.contains('delete-btn')) {
-                    if (confirm(`確定要刪除這個帳號嗎？`)) {
-                        users = users.filter(u => u.id != id);
-                        saveUsers();
-                        renderUserList();
-                        resetAccountForm();
-                        showSettingsMessage('帳號已刪除！');
-                    }
-                }
-            });
-
-            cancelEditButton.addEventListener('click', resetAccountForm);
-
-            function resetAccountForm() {
-                accountForm.reset();
-                editUserIdInput.value = '';
-                accountFormSubmitButton.textContent = '新增帳號';
-                accountFormSubmitButton.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                accountFormSubmitButton.classList.add('bg-green-500', 'hover:bg-green-600');
-                cancelEditButton.classList.add('hidden');
-            }
-
-            function showSettingsMessage(message, type = 'success') {
-                settingsMessage.textContent = message;
-                settingsMessage.className = `mb-2 text-center font-medium h-5 ${type === 'error' ? 'text-red-500' : 'text-green-600'}`;
-                setTimeout(() => { settingsMessage.textContent = ''; }, 3000);
-            }
-            
-            function escapeHTML(str) {
-                const p = document.createElement('p');
-                p.textContent = str;
-                return p.innerHTML;
-            }
-            
-            // 初始化
-            loadCommunityName();
-            loadRememberedUser();
+        // --- Event Listeners ---
+        addPollBtn.addEventListener('click', () => createPoll());
+        importCsvBtn.addEventListener('click', () => importCsvInput.click());
+        importCsvInput.addEventListener('change', handleCsvImport);
+        clearResidentsBtn.addEventListener('click', clearResidentsList);
+        selectAllResidentsCheckbox.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            document.querySelectorAll('.resident-checkbox').forEach(cb => cb.checked = isChecked);
         });
+        generatePrintBtn.addEventListener('click', generateAndPrintSlips);
+
+
+        // --- Utility Functions ---
+        function escapeHTML(str) {
+            if (typeof str !== 'string') return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        // --- Core Functions ---
+
+        function addInitialData() {
+            // Create initial poll
+            createPoll({
+                sectionTitle: '議題 #1',
+                title: '管理費調整案',
+                proposer: '管理委員會',
+                description: '為提升社區服務品質，擬調整管理費...',
+                options: [
+                    { text: '同意', qrValue: 'M01-01' },
+                    { text: '不同意', qrValue: 'M01-02' },
+                    { text: '廢票', qrValue: 'M01-03' }
+                ]
+            });
+            renderResidents(); // Render the initial empty state for residents
+        }
+
+        function handleCsvImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                try {
+                    const parsedResidents = parseCSV(text);
+                    if (parsedResidents.length === 0) {
+                         alert('CSV檔案中沒有可辨識的住戶資料，請確認檔案格式是否正確。');
+                         return;
+                    }
+                    residents = parsedResidents; // Replace existing residents
+                    renderResidents();
+                    alert(`成功匯入 ${residents.length} 筆住戶資料！`);
+                } catch (error) {
+                    console.error("CSV Parsing Error:", error);
+                    alert(`匯入失敗：${error.message}`);
+                }
+            };
+            reader.onerror = () => {
+                alert('讀取檔案時發生錯誤。');
+            };
+            reader.readAsText(file, "UTF-8");
+            
+            event.target.value = ''; // Reset input for re-uploading the same file
+        }
+
+        function parseCSV(text) {
+            const rows = text.split('\n').filter(row => row.trim() !== '');
+            if (rows.length < 2) {
+                throw new Error("CSV檔案至少需要一個標頭行和一行資料。");
+            }
+            
+            const headerRow = rows[0].trim().startsWith('\uFEFF') ? rows[0].trim().substring(1) : rows[0].trim();
+            const headers = headerRow.split(',').map(h => h.replace(/"/g, '').trim());
+
+            const headerMap = {
+                qrcodeValue: ['qrcodeValue', 'QR Code', 'QR Code碼'],
+                unit: ['unit', '戶號'],
+                name: ['name', '姓名'],
+                address: ['address', '住址'],
+                area: ['area', '坪數'],
+                ownership: ['ownership', '區分權(%)', '區分權比例']
+            };
+
+            const findIndex = (possibleNames) => {
+                for (const name of possibleNames) {
+                    const index = headers.indexOf(name);
+                    if (index !== -1) return index;
+                }
+                return -1;
+            };
+
+            const indices = {
+                qrcodeValue: findIndex(headerMap.qrcodeValue),
+                unit: findIndex(headerMap.unit),
+                name: findIndex(headerMap.name),
+                address: findIndex(headerMap.address),
+                area: findIndex(headerMap.area),
+                ownership: findIndex(headerMap.ownership)
+            };
+
+            if (indices.unit === -1 || indices.name === -1) {
+                throw new Error(`CSV檔案的標頭 (header) 必須包含 "unit" (或 "戶號") 和 "name" (或 "姓名")。`);
+            }
+            
+            const importedResidents = [];
+            for (let i = 1; i < rows.length; i++) {
+                const values = rows[i].trim().split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/"/g, '').trim());
+                
+                const resident = {
+                    id: `resident-${i}`,
+                    unit: values[indices.unit] || '',
+                    name: values[indices.name] || '',
+                    qrcodeValue: indices.qrcodeValue !== -1 ? (values[indices.qrcodeValue] || '') : '',
+                    address: indices.address !== -1 ? (values[indices.address] || '') : '',
+                    area: indices.area !== -1 ? (values[indices.area] || '') : '',
+                    ownership: indices.ownership !== -1 ? (values[indices.ownership] || '') : ''
+                };
+
+                if (resident.unit && resident.name) {
+                    importedResidents.push(resident);
+                }
+            }
+            return importedResidents;
+        }
+
+
+        function clearResidentsList() {
+            if (residents.length > 0 && confirm('您確定要清空目前的住戶列表嗎？')) {
+                residents = [];
+                renderResidents();
+            }
+        }
+        
+        function createPoll(initialData = {}) {
+            pollIdCounter++;
+            const pollId = `poll-${pollIdCounter}`;
+            const pollNumberStr = String(pollIdCounter).padStart(2, '0');
+            
+            const pollData = {
+                id: pollId,
+                sectionTitle: initialData.sectionTitle || `議題 #${pollIdCounter}`,
+                title: initialData.title || `新投票 ${pollIdCounter}`,
+                proposer: initialData.proposer || '',
+                description: initialData.description || '',
+                options: initialData.options || [
+                    { text: '同意', qrValue: `M${pollNumberStr}-01` },
+                    { text: '不同意', qrValue: `M${pollNumberStr}-02` }
+                ]
+            };
+            polls.push(pollData);
+            renderPolls();
+        }
+        
+        function renderPolls() {
+            pollsListContainer.innerHTML = '';
+            polls.forEach((poll) => {
+                const pollElement = document.createElement('div');
+                pollElement.className = 'p-4 border border-gray-300 rounded-lg';
+                pollElement.dataset.id = poll.id;
+
+                let optionsHTML = '';
+                poll.options.forEach((opt, optIndex) => {
+                    optionsHTML += `
+                        <div class="option-input-group mt-2">
+                            <input type="text" value="${escapeHTML(opt.text)}" class="option-text-input border-gray-300 rounded-md shadow-sm" placeholder="選項文字" data-option-index="${optIndex}">
+                            <input type="text" value="${escapeHTML(opt.qrValue)}" class="option-qr-input border-gray-300 rounded-md shadow-sm" placeholder="自訂QR Code碼" data-option-index="${optIndex}">
+                            <button class="remove-option-btn bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 text-sm" data-option-index="${optIndex}">移除</button>
+                        </div>
+                    `;
+                });
+
+                pollElement.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <input type="text" value="${escapeHTML(poll.sectionTitle)}" class="poll-section-title-input text-lg font-semibold text-gray-800 bg-transparent w-auto focus:bg-gray-100 focus:outline-none rounded px-2 py-1 border border-transparent focus:border-gray-300">
+                        <button class="remove-poll-btn bg-red-500 text-white font-bold py-1 px-3 rounded-md hover:bg-red-600 text-sm">刪除投票</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">主旨</label>
+                            <input type="text" value="${escapeHTML(poll.title)}" class="poll-title-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">提案人</label>
+                            <input type="text" value="${escapeHTML(poll.proposer)}" class="poll-proposer-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                        </div>
+                    </div>
+                     <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700">說明</label>
+                        <textarea class="poll-description-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" rows="2">${escapeHTML(poll.description)}</textarea>
+                    </div>
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700">投票項目</label>
+                        <div class="options-container">${optionsHTML}</div>
+                        <button class="add-option-btn mt-2 text-sm text-blue-600 hover:text-blue-800">+ 新增選項</button>
+                    </div>
+                `;
+                pollsListContainer.appendChild(pollElement);
+            });
+            addPollEventListeners();
+        }
+
+        function addPollEventListeners() {
+            document.querySelectorAll('.poll-section-title-input, .poll-title-input, .poll-proposer-input, .poll-description-input').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const pollId = e.target.closest('[data-id]').dataset.id;
+                    const poll = polls.find(p => p.id === pollId);
+                    if (!poll) return;
+
+                    if (e.target.classList.contains('poll-section-title-input')) poll.sectionTitle = e.target.value;
+                    else if (e.target.classList.contains('poll-title-input')) poll.title = e.target.value;
+                    else if (e.target.classList.contains('poll-proposer-input')) poll.proposer = e.target.value;
+                    else if (e.target.classList.contains('poll-description-input')) poll.description = e.target.value;
+                });
+            });
+
+            document.querySelectorAll('.remove-poll-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const pollId = e.target.closest('[data-id]').dataset.id;
+                    polls = polls.filter(p => p.id !== pollId);
+                    renderPolls();
+                });
+            });
+
+            document.querySelectorAll('.add-option-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const pollId = e.target.closest('[data-id]').dataset.id;
+                    const poll = polls.find(p => p.id === pollId);
+                    if (!poll) return;
+                    const pollNumber = parseInt(poll.id.split('-')[1], 10);
+                    const pollNumberStr = String(pollNumber).padStart(2, '0');
+                    const newIndex = poll.options.length + 1;
+                    const newOptionNumberStr = String(newIndex).padStart(2, '0');
+                    poll.options.push({ text: '', qrValue: `M${pollNumberStr}-${newOptionNumberStr}` });
+                    renderPolls();
+                });
+            });
+            
+            document.querySelectorAll('.remove-option-btn').forEach(btn => {
+                 btn.addEventListener('click', (e) => {
+                    const pollId = e.target.closest('[data-id]').dataset.id;
+                    const optionIndex = parseInt(e.target.dataset.optionIndex, 10);
+                    const poll = polls.find(p => p.id === pollId);
+                    if (poll) {
+                        poll.options.splice(optionIndex, 1);
+                        renderPolls();
+                    }
+                });
+            });
+
+            document.querySelectorAll('.option-text-input, .option-qr-input').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const pollId = e.target.closest('[data-id]').dataset.id;
+                    const optionIndex = parseInt(e.target.dataset.optionIndex, 10);
+                    const poll = polls.find(p => p.id === pollId);
+                    if (!poll || !poll.options[optionIndex]) return;
+                    const property = e.target.classList.contains('option-text-input') ? 'text' : 'qrValue';
+                    poll.options[optionIndex][property] = e.target.value;
+                });
+            });
+        }
+        
+        function renderResidents() {
+            residentsListTbody.innerHTML = '';
+             if (residents.length === 0) {
+                residentsListTbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-gray-500">請從CSV檔案匯入住戶資料。</td></tr>`;
+            } else {
+                residents.forEach((res, index) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="p-3">
+                            <input type="checkbox" class="resident-checkbox h-4 w-4 text-red-600 border-gray-300 rounded" data-resident-id="${res.id}">
+                        </td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-900">${index + 1}</td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.qrcodeValue)}</td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.unit)}</td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.name)}</td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.address)}</td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.area)}</td>
+                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.ownership)}</td>
+                    `;
+                    residentsListTbody.appendChild(tr);
+                });
+            }
+            selectAllResidentsCheckbox.checked = false;
+        }
+
+        function generateAndPrintSlips() {
+            try {
+                const selectedResidentIds = Array.from(document.querySelectorAll('.resident-checkbox:checked')).map(cb => cb.dataset.residentId);
+                
+                if (selectedResidentIds.length === 0) {
+                    alert('請至少選擇一位住戶來列印投票單。');
+                    return;
+                }
+
+                if (polls.length === 0) {
+                    alert('請先建立至少一個投票項目。');
+                    return;
+                }
+
+                const selectedResidents = residents.filter(res => selectedResidentIds.includes(res.id));
+                const communityName = communityNameInput.value;
+                const eventName = eventNameInput.value;
+                const eventDate = eventDateInput.value ? new Date(eventDateInput.value) : new Date();
+                const formattedDate = `投票日期 : ${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月${eventDate.getDate()}日`;
+                const pollsPerPage = parseInt(pollsPerPageInput.value, 10) || 1;
+
+                let allPagesHTML = '';
+
+                selectedResidents.forEach(resident => {
+                    const residentIndex = residents.findIndex(r => r.id === resident.id);
+                    const residentPrefix = `A${String(residentIndex + 1).padStart(3, '0')}`;
+
+                    const totalPagesForResident = Math.ceil(polls.length / pollsPerPage);
+                    
+                    for (let pageNum = 0; pageNum < totalPagesForResident; pageNum++) {
+                        const startPollIndex = pageNum * pollsPerPage;
+                        const endPollIndex = startPollIndex + pollsPerPage;
+                        const pollsForThisPage = polls.slice(startPollIndex, endPollIndex);
+                        
+                        allPagesHTML += '<div class="print-page">';
+
+                        if (pageNum === 0) {
+                            allPagesHTML += `
+                                <div class="print-header">
+                                    <h1>${escapeHTML(communityName)}</h1>
+                                    <h2>${escapeHTML(eventName)} 投票單</h2>
+                                    <p>${escapeHTML(formattedDate)}</p>
+                                </div>
+                            `;
+                        } else {
+                            allPagesHTML += `<div class="resident-unit-header">${escapeHTML(resident.unit)}</div>`;
+                        }
+                        
+                        pollsForThisPage.forEach((poll) => {
+                            let optionsHTML = '';
+                            poll.options.forEach((option, optIndex) => {
+                                const finalQrCodeValue = `${residentPrefix}${option.qrValue}`;
+                                const qrData = finalQrCodeValue;
+                                const escapedQrData = escapeHTML(qrData);
+
+                                optionsHTML += `
+                                    <div class="option-item">
+                                        <div class="option-qr-code" id="qr-${resident.id}-${poll.id}-${optIndex}" data-qr-content="${escapedQrData}"></div>
+                                        <span class="option-text">${escapeHTML(option.text)} ( )</span>
+                                    </div>`;
+                            });
+
+                            allPagesHTML += `
+                                <div class="poll-container">
+                                    <h3 class="poll-title">${escapeHTML(poll.sectionTitle)}: ${escapeHTML(poll.title)}</h3>
+                                    <div class="options-grid">${optionsHTML}</div>
+                                </div>
+                            `;
+                        });
+                        allPagesHTML += '</div>';
+                    }
+                });
+
+                printArea.innerHTML = allPagesHTML;
+                
+                const qrElements = printArea.querySelectorAll('.option-qr-code');
+                qrElements.forEach(el => {
+                    try {
+                        const content = el.dataset.qrContent;
+                        if (content) {
+                            new QRCode(el, {
+                                text: content,
+                                width: 100,
+                                height: 100,
+                                correctLevel: QRCode.CorrectLevel.M
+                            });
+                        } else {
+                           el.innerHTML = '<span style="color: red; font-size: 9px;">無 QR 碼內容</span>';
+                        }
+                    } catch (e) {
+                        console.error("無法產生 QR Code:", el.dataset.qrContent, e);
+                        el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
+                    }
+                });
+
+                printArea.classList.remove('hidden');
+                setTimeout(() => {
+                    window.print();
+                    printArea.classList.add('hidden');
+                    printArea.innerHTML = '';
+                }, 500);
+
+            } catch (error) {
+                console.error("產生列印內容時發生錯誤:", error);
+                alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
+                printArea.classList.add('hidden');
+                printArea.innerHTML = '';
+            }
+        }
+    });
     </script>
 </body>
 </html>
