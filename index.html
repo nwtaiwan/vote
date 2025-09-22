@@ -45,11 +45,6 @@
                 display: none !important;
             }
 
-            /* Show the print area */
-            #print-area {
-                display: block !important;
-            }
-
             .print-page {
                 page-break-after: always;
                 position: relative;
@@ -101,7 +96,7 @@
 
             .options-grid {
                 display: grid;
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(5, 1fr);
                 gap: 1rem;
             }
 
@@ -113,13 +108,17 @@
             }
             
             .option-qr-code {
-                width: 100px;
-                height: 100px;
+                width: 80px;
+                height: 80px;
                 margin-bottom: 0.5rem;
             }
 
             .option-text {
                 font-size: 12pt;
+            }
+            
+            .blank-page {
+                page-break-after: always;
             }
         }
     </style>
@@ -144,10 +143,6 @@
                 <div>
                     <label for="event-date" class="block text-sm font-medium text-gray-700">投票日期</label>
                     <input type="date" id="event-date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
-                </div>
-                <div>
-                    <label for="polls-per-page" class="block text-sm font-medium text-gray-700">每頁列印議題數量</label>
-                    <input type="number" id="polls-per-page" value="2" min="1" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
                 </div>
             </div>
         </section>
@@ -202,13 +197,13 @@
         <!-- 4. Action Button -->
         <section class="text-center">
             <button id="generate-print-btn" class="bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:bg-red-700 text-xl transition-transform transform hover:scale-105">
-                產生並列印投票單
+                列印投票單
             </button>
         </section>
 
     </div>
 
-    <!-- Print Area (hidden by default) -->
+    <!-- This div is used for printing and is not visible on screen -->
     <div id="print-area" class="hidden"></div>
 
     <script>
@@ -217,7 +212,6 @@
         const communityNameInput = document.getElementById('community-name');
         const eventNameInput = document.getElementById('event-name');
         const eventDateInput = document.getElementById('event-date');
-        const pollsPerPageInput = document.getElementById('polls-per-page');
         
         const addPollBtn = document.getElementById('add-poll-btn');
         const pollsListContainer = document.getElementById('polls-list');
@@ -229,8 +223,7 @@
         const selectAllResidentsCheckbox = document.getElementById('select-all-residents');
 
         const generatePrintBtn = document.getElementById('generate-print-btn');
-        const printArea = document.getElementById('print-area');
-
+        
         // --- Data State ---
         let polls = [];
         let residents = [];
@@ -527,6 +520,12 @@
         }
 
         function generateAndPrintSlips() {
+            const printArea = document.getElementById('print-area');
+            if (!printArea) {
+                console.error("Print area not found!");
+                return;
+            }
+
             try {
                 const selectedResidentIds = Array.from(document.querySelectorAll('.resident-checkbox:checked')).map(cb => cb.dataset.residentId);
                 
@@ -545,63 +544,57 @@
                 const eventName = eventNameInput.value;
                 const eventDate = eventDateInput.value ? new Date(eventDateInput.value) : new Date();
                 const formattedDate = `投票日期 : ${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月${eventDate.getDate()}日`;
-                const pollsPerPage = parseInt(pollsPerPageInput.value, 10) || 1;
 
                 let allPagesHTML = '';
 
-                selectedResidents.forEach(resident => {
-                    const residentIndex = residents.findIndex(r => r.id === resident.id);
-                    const residentPrefix = `A${String(residentIndex + 1).padStart(3, '0')}`;
-
-                    const totalPagesForResident = Math.ceil(polls.length / pollsPerPage);
+                selectedResidents.forEach((resident, residentIdx) => {
+                    const residentIndexInFullList = residents.findIndex(r => r.id === resident.id);
+                    const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
                     
-                    for (let pageNum = 0; pageNum < totalPagesForResident; pageNum++) {
-                        const startPollIndex = pageNum * pollsPerPage;
-                        const endPollIndex = startPollIndex + pollsPerPage;
-                        const pollsForThisPage = polls.slice(startPollIndex, endPollIndex);
-                        
-                        allPagesHTML += '<div class="print-page">';
-                        
-                        // Always add resident unit header to every page for this resident
-                        allPagesHTML += `<div class="resident-unit-header">${escapeHTML(resident.unit)}</div>`;
+                    let residentContentHTML = '';
+                    
+                    polls.forEach((poll) => {
+                        let optionsHTML = '';
+                        poll.options.forEach((option, optIndex) => {
+                            const finalQrCodeValue = `${residentPrefix}${option.qrValue}`;
+                            const qrData = finalQrCodeValue;
+                            const escapedQrData = escapeHTML(qrData);
 
-                        if (pageNum === 0) {
-                            allPagesHTML += `
-                                <div class="print-header">
-                                    <h1>${escapeHTML(communityName)}</h1>
-                                    <h2>${escapeHTML(eventName)} 投票單</h2>
-                                    <p>${escapeHTML(formattedDate)}</p>
-                                </div>
-                            `;
-                        }
-                        
-                        pollsForThisPage.forEach((poll) => {
-                            let optionsHTML = '';
-                            poll.options.forEach((option, optIndex) => {
-                                const finalQrCodeValue = `${residentPrefix}${option.qrValue}`;
-                                const qrData = finalQrCodeValue;
-                                const escapedQrData = escapeHTML(qrData);
-
-                                optionsHTML += `
-                                    <div class="option-item">
-                                        <div class="option-qr-code" id="qr-${resident.id}-${poll.id}-${optIndex}" data-qr-content="${escapedQrData}"></div>
-                                        <span class="option-text">${escapeHTML(option.text)} (　　)</span>
-                                    </div>`;
-                            });
-
-                            allPagesHTML += `
-                                <div class="poll-container">
-                                    <h3 class="poll-title">${escapeHTML(poll.sectionTitle)}</h3>
-                                    <div class="poll-details">
-                                        <strong>主旨：</strong>${escapeHTML(poll.title)}<br>
-                                        <strong>說明：</strong>${escapeHTML(poll.description)}<br>
-                                        <strong>提案人：</strong>${escapeHTML(poll.proposer)}
-                                    </div>
-                                    <div class="options-grid">${optionsHTML}</div>
-                                </div>
-                            `;
+                            optionsHTML += `
+                                <div class="option-item">
+                                    <div class="option-qr-code" id="qr-${resident.id}-${poll.id}-${optIndex}" data-qr-content="${escapedQrData}"></div>
+                                    <span class="option-text">${escapeHTML(option.text)} (　　)</span>
+                                </div>`;
                         });
-                        allPagesHTML += '</div>';
+
+                        residentContentHTML += `
+                            <div class="poll-container">
+                                <h3 class="poll-title">${escapeHTML(poll.sectionTitle)}</h3>
+                                <div class="poll-details">
+                                    <strong>主旨：</strong>${escapeHTML(poll.title)}<br>
+                                    <strong>說明：</strong>${escapeHTML(poll.description)}<br>
+                                    <strong>提案人：</strong>${escapeHTML(poll.proposer)}
+                                </div>
+                                <div class="options-grid">${optionsHTML}</div>
+                            </div>
+                        `;
+                    });
+
+                    allPagesHTML += `
+                        <div class="print-page">
+                            <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
+                            <div class="print-header">
+                                <h1>${escapeHTML(communityName)}</h1>
+                                <h2>${escapeHTML(eventName)} 投票單</h2>
+                                <p>${escapeHTML(formattedDate)}</p>
+                            </div>
+                            ${residentContentHTML}
+                        </div>
+                    `;
+
+                    // Add a blank page after each resident, except the last one
+                    if (residentIdx < selectedResidents.length - 1) {
+                        allPagesHTML += '<div class="blank-page"></div>';
                     }
                 });
 
@@ -614,8 +607,8 @@
                         if (content && content.trim() !== '') {
                             new QRCode(el, {
                                 text: content,
-                                width: 100,
-                                height: 100,
+                                width: 80,
+                                height: 80,
                                 correctLevel: QRCode.CorrectLevel.M
                             });
                         } else {
@@ -626,18 +619,36 @@
                         el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
                     }
                 });
+                
+                // Use a temporary iframe to print to avoid showing content on the main page
+                const iframe = document.createElement('iframe');
+                iframe.style.position = 'absolute';
+                iframe.style.width = '0';
+                iframe.style.height = '0';
+                iframe.style.border = '0';
+                document.body.appendChild(iframe);
 
-                printArea.classList.remove('hidden');
-                setTimeout(() => {
-                    window.print();
-                    printArea.classList.add('hidden');
-                    printArea.innerHTML = '';
-                }, 500);
+                const pri = iframe.contentWindow;
+                pri.document.open();
+                pri.document.write(document.head.innerHTML); // copy styles
+                pri.document.write('</head><body onload="window.print()">');
+                pri.document.write(printArea.innerHTML);
+                pri.document.write('</body></html>');
+                pri.document.close();
+                
+                // Clean up the iframe after printing
+                iframe.onload = () => {
+                     setTimeout(() => {
+                         document.body.removeChild(iframe);
+                     }, 1000); // delay to ensure print dialog opens
+                };
+
 
             } catch (error) {
                 console.error("產生列印內容時發生錯誤:", error);
                 alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
-                printArea.classList.add('hidden');
+            } finally {
+                 // Clear the on-page print area immediately
                 printArea.innerHTML = '';
             }
         }
