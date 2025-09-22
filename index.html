@@ -1059,9 +1059,12 @@
             lastVoteScanTime = now;
             lastScannedVoteCode = decodedText;
 
+            // Trim any whitespace from the scanned code
+            const trimmedDecodedText = decodedText.trim();
+
             // Use a regex to robustly find the option code at the end of the string
             const voteOptionRegex = /(M\d{2}-\d{2})$/;
-            const match = decodedText.match(voteOptionRegex);
+            const match = trimmedDecodedText.match(voteOptionRegex);
 
             if (!match) {
                 scannerVoteStatus.textContent = '無效的投票 QR Code 格式 (找不到選項碼)。';
@@ -1071,7 +1074,7 @@
             }
 
             const optionQrValue = match[0]; // e.g., "M01-01"
-            const residentIdentifier = decodedText.substring(0, decodedText.length - optionQrValue.length);
+            const residentIdentifier = trimmedDecodedText.replace(voteOptionRegex, "");
             
             if (!residentIdentifier) {
                 scannerVoteStatus.textContent = '無效的投票 QR Code 格式 (找不到住戶碼)。';
