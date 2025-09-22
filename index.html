@@ -34,6 +34,7 @@
             display: none;
         }
 
+
         /* --- Print Specific Styles --- */
         @media print {
             @page {
@@ -49,11 +50,11 @@
             .resident-print-container {
                 page-break-after: always;
                 position: relative;
-                min-height: 27.7cm; /* Ensure it takes full page height */
+                min-height: 27.7cm;
             }
             
             .poll-container {
-                page-break-inside: avoid; /* Prevent polls from splitting across pages */
+                page-break-inside: avoid;
                 margin-top: 1.5rem;
                 border: 1px solid #666;
                 padding: 0.75rem;
@@ -70,9 +71,9 @@
             .print-header p { text-align: right; margin: 0.5rem 0 0 0; }
 
             .resident-unit-header {
-                position: fixed;
-                top: 0.5cm;
-                right: 0.5cm;
+                position: absolute;
+                top: 0;
+                right: 0;
                 font-size: 14pt;
                 font-weight: bold;
             }
@@ -116,11 +117,6 @@
 
             .option-text {
                 font-size: 12pt;
-            }
-            
-            .blank-page {
-                page-break-after: always;
-                content: "";
             }
         }
     </style>
@@ -605,11 +601,6 @@
                                 ${residentContentHTML}
                             </div>
                         `;
-
-                        // Add a blank page after each resident, except the last one
-                        if (residentIdx < selectedResidents.length - 1) {
-                            allPagesHTML += '<div class="blank-page"></div>';
-                        }
                     });
 
                     printArea.innerHTML = allPagesHTML;
@@ -639,18 +630,19 @@
                     // Allow time for QR codes to render before printing
                     setTimeout(() => {
                         window.print();
-                        document.body.classList.remove('printing');
                     }, 500); // 500ms delay for rendering
 
                 } catch (error) {
                     console.error("產生列印內容時發生錯誤:", error);
                     alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
                 } finally {
-                    // This now runs before print dialog is even closed, so we move cleanup
-                    setTimeout(() => {
+                    const afterPrintHandler = () => {
+                        document.body.classList.remove('printing');
                         loader.classList.add('hidden');
                         printArea.innerHTML = '';
-                    }, 1000);
+                        window.removeEventListener('afterprint', afterPrintHandler);
+                    };
+                    window.addEventListener('afterprint', afterPrintHandler, { once: true });
                 }
             }, 100); // 100ms timeout to show loader
         }
