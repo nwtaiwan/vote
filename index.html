@@ -44,10 +44,20 @@
             #app, #loader {
                 display: none !important;
             }
+            
+            #print-area {
+                display: block !important;
+            }
 
             .resident-print-container {
                 page-break-after: always;
+            }
+            
+            .print-page-content {
                 position: relative;
+                width: 19cm; /* A4 width - 2cm margins */
+                min-height: 27.7cm; /* A4 height - 2cm margins */
+                box-sizing: border-box;
             }
 
             .poll-container {
@@ -203,6 +213,9 @@
         <div class="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-white"></div>
         <span class="ml-4 text-white text-xl">正在產生投票單...</span>
     </div>
+
+    <!-- This div is used for printing and is not visible on screen -->
+    <div id="print-area" class="hidden"></div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -592,7 +605,9 @@
                         allPagesHTML += `
                             <div class="resident-print-container">
                                 <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
-                                ${residentContentHTML}
+                                <div class="print-page-content">
+                                    ${residentContentHTML}
+                                </div>
                             </div>
                         `;
 
