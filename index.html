@@ -69,9 +69,9 @@
             .print-header p { text-align: right; margin: 0.5rem 0 0 0; }
 
             .resident-unit-header {
-                position: absolute;
-                top: 0;
-                right: 0;
+                position: fixed; /* Use fixed to repeat on every page */
+                top: 1cm;
+                right: 1cm;
                 font-size: 14pt;
                 font-weight: bold;
             }
@@ -207,7 +207,7 @@
     </div>
 
     <!-- This div is used for printing and is not visible on screen -->
-    <div id="print-area" class="hidden"></div>
+    <div id="print-area"></div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
