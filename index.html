@@ -6,10 +6,16 @@
     <title>QR Code 投票單產生器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Noto Sans TC', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
+
         /* --- General UI Styles --- */
         .section-header {
             border-bottom: 2px solid #ef4444; /* red-500 */
@@ -26,14 +32,29 @@
             align-items: center;
         }
         
-        body.printing #app, body.printing #loader {
-            display: none;
+        /* --- Hide/Show Logic for Printing --- */
+        body.printing #app, body.printing #loader, body.printing #custom-modal {
+            visibility: hidden;
         }
-        
         body:not(.printing) #print-area {
             display: none;
         }
 
+        /* --- Custom Modal Styles --- */
+        #custom-modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        #custom-modal.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #modal-content {
+            transition: transform 0.3s ease-in-out;
+            transform: scale(0.95);
+        }
+        #custom-modal:not(.hidden) #modal-content {
+            transform: scale(1);
+        }
 
         /* --- Print Specific Styles --- */
         @media print {
@@ -47,14 +68,18 @@
                 print-color-adjust: exact;
             }
             
+            #app, #loader, #custom-modal {
+                display: none !important;
+            }
+
             #print-area {
                 display: block !important;
             }
 
             .resident-print-container {
                 page-break-after: always;
-                position: relative;
-                min-height: 27.7cm;
+                /* position: relative; /* No longer needed here */
+                min-height: 27.7cm; /* A4 height minus margins */
             }
             
             .poll-container {
@@ -96,9 +121,10 @@
             }
 
             .options-grid {
-                display: grid;
-                grid-template-columns: repeat(5, 1fr);
+                display: flex;
+                flex-wrap: wrap;
                 gap: 1rem;
+                justify-content: flex-start;
             }
 
             .option-item {
@@ -107,8 +133,22 @@
                 align-items: center;
                 text-align: center;
                 page-break-inside: avoid;
+                flex: 0 0 calc(20% - 0.8rem); /* 5 items per row, accounting for gap */
+                max-width: calc(20% - 0.8rem);
             }
             
+            .print-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .print-table thead {
+                display: table-header-group;
+            }
+            .print-header-wrapper {
+                position: relative;
+                padding-bottom: 1rem; /* Space between header and content */
+            }
+
             .option-qr-code {
                 width: 80px;
                 height: 80px;
@@ -121,6 +161,7 @@
 
             .option-text {
                 font-size: 12pt;
+                word-break: break-word;
             }
         }
     </style>
@@ -136,15 +177,15 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label for="community-name" class="block text-sm font-medium text-gray-700">社區名稱</label>
-                    <input type="text" id="community-name" value="西北社區" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                    <input type="text" id="community-name" value="西北社區" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
                 </div>
                 <div>
                     <label for="event-name" class="block text-sm font-medium text-gray-700">會議活動名稱</label>
-                    <input type="text" id="event-name" value="113年度區分所有權人會議" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                    <input type="text" id="event-name" value="113年度區分所有權人會議" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
                 </div>
                 <div>
                     <label for="event-date" class="block text-sm font-medium text-gray-700">投票日期</label>
-                    <input type="date" id="event-date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                    <input type="date" id="event-date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
                 </div>
             </div>
         </section>
@@ -153,7 +194,7 @@
         <section class="bg-white p-6 rounded-lg shadow-md">
             <div class="flex justify-between items-center">
                 <h2 class="section-header">投票議題管理</h2>
-                <button id="add-poll-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">新增投票</button>
+                <button id="add-poll-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">新增投票</button>
             </div>
             <div id="polls-list" class="mt-4 space-y-4">
                 <!-- Polls will be dynamically inserted here -->
@@ -162,38 +203,42 @@
         
         <!-- 3. Residents List Section -->
         <section class="bg-white p-6 rounded-lg shadow-md">
-             <div class="flex justify-between items-center">
-                <h2 class="section-header">匯入住戶列表</h2>
-                <div class="flex items-center gap-2">
-                    <input type="file" id="import-csv-input" class="hidden" accept=".csv">
-                    <button id="import-csv-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">從CSV匯入</button>
-                    <button id="clear-residents-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600">清空列表</button>
-                </div>
-            </div>
+             <div class="flex flex-wrap justify-between items-center gap-4">
+                 <h2 class="section-header">匯入住戶列表</h2>
+                 <div class="flex items-center gap-2">
+                     <input type="file" id="import-csv-input" class="hidden" accept=".csv,text/csv">
+                     <button id="import-csv-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">從CSV匯入</button>
+                     <button id="clear-residents-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors">清空列表</button>
+                 </div>
+             </div>
              <p class="text-sm text-gray-600 mt-2">
-                請從「西北社區QR Code報到系統」的住戶管理頁面，點擊「匯出CSV」按鈕，然後將下載的檔案從這裡匯入。
-            </p>
-            <div class="mt-4 overflow-x-auto max-h-96">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50 sticky top-0">
-                        <tr>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
-                                <input type="checkbox" id="select-all-residents" class="h-4 w-4 text-red-600 border-gray-300 rounded">
-                            </th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">序號</th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">戶號</th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地址</th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">坪數</th>
-                            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">區分權比例</th>
-                        </tr>
-                    </thead>
-                    <tbody id="residents-list" class="bg-white divide-y divide-gray-200">
-                        <!-- Residents will be dynamically inserted here -->
-                    </tbody>
-                </table>
+                 請從「西北社區QR Code報到系統」的住戶管理頁面，點擊「匯出CSV」按鈕，然後將下載的檔案從這裡匯入。
+                 <a href="#" id="download-sample-csv" class="text-blue-600 hover:underline">下載範例CSV檔</a>
+             </p>
+             <div class="mt-2 text-sm font-medium text-gray-700">
+                已選擇 <span id="selected-residents-count" class="font-bold text-red-600">0</span> / <span id="total-residents-count" class="font-bold">0</span> 位住戶
             </div>
+             <div class="mt-4 overflow-x-auto max-h-96">
+                 <table class="min-w-full divide-y divide-gray-200">
+                     <thead class="bg-gray-50 sticky top-0 z-10">
+                         <tr>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                                 <input type="checkbox" id="select-all-residents" class="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                             </th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">序號</th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">戶號</th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地址</th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">坪數</th>
+                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">區分權比例</th>
+                         </tr>
+                     </thead>
+                     <tbody id="residents-list" class="bg-white divide-y divide-gray-200">
+                         <!-- Residents will be dynamically inserted here -->
+                     </tbody>
+                 </table>
+             </div>
         </section>
 
         <!-- 4. Action Button -->
@@ -211,6 +256,17 @@
         <span class="ml-4 text-white text-xl">正在產生投票單...</span>
     </div>
 
+    <!-- Custom Modal -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div id="modal-content" class="bg-white rounded-lg shadow-xl p-6 w-11/12 md:max-w-md mx-auto">
+            <h3 id="modal-title" class="text-lg font-bold text-gray-800"></h3>
+            <p id="modal-message" class="mt-2 text-sm text-gray-600"></p>
+            <div id="modal-buttons" class="mt-6 flex justify-end space-x-3">
+                <!-- Buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
     <!-- This div is used for printing and is not visible on screen -->
     <div id="print-area"></div>
 
@@ -220,50 +276,131 @@
         const communityNameInput = document.getElementById('community-name');
         const eventNameInput = document.getElementById('event-name');
         const eventDateInput = document.getElementById('event-date');
-        
         const addPollBtn = document.getElementById('add-poll-btn');
         const pollsListContainer = document.getElementById('polls-list');
-        
         const importCsvInput = document.getElementById('import-csv-input');
         const importCsvBtn = document.getElementById('import-csv-btn');
         const clearResidentsBtn = document.getElementById('clear-residents-btn');
         const residentsListTbody = document.getElementById('residents-list');
         const selectAllResidentsCheckbox = document.getElementById('select-all-residents');
-
         const generatePrintBtn = document.getElementById('generate-print-btn');
+        const downloadSampleCsvBtn = document.getElementById('download-sample-csv');
+        const selectedResidentsCountSpan = document.getElementById('selected-residents-count');
+        const totalResidentsCountSpan = document.getElementById('total-residents-count');
         const loader = document.getElementById('loader');
-        
+        const modal = document.getElementById('custom-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalButtons = document.getElementById('modal-buttons');
+
         // --- Data State ---
-        let polls = [];
-        let residents = [];
-        let pollIdCounter = 0;
+        const STORAGE_KEY = 'qrVoteGeneratorState';
+        let state = {
+            settings: {
+                communityName: '西北社區',
+                eventName: '113年度區分所有權人會議',
+                eventDate: new Date().toISOString().split('T')[0],
+            },
+            polls: [],
+            residents: [],
+            pollIdCounter: 0,
+        };
 
-        // --- Initial Setup ---
-        eventDateInput.valueAsDate = new Date(); // Set today's date
-        addInitialData();
+        // --- Modal Logic ---
+        let modalResolve = null;
 
-        // --- Event Listeners ---
-        addPollBtn.addEventListener('click', () => createPoll());
-        importCsvBtn.addEventListener('click', () => importCsvInput.click());
-        importCsvInput.addEventListener('change', handleCsvImport);
-        clearResidentsBtn.addEventListener('click', clearResidentsList);
-        selectAllResidentsCheckbox.addEventListener('change', (e) => {
-            const isChecked = e.target.checked;
-            document.querySelectorAll('.resident-checkbox').forEach(cb => cb.checked = isChecked);
-        });
-        generatePrintBtn.addEventListener('click', generateAndPrintSlips);
+        const showModal = (title, message, buttons) => {
+            modalTitle.textContent = title;
+            modalMessage.innerHTML = message; // Use innerHTML to allow simple formatting
+            modalButtons.innerHTML = '';
+            buttons.forEach(btn => {
+                const buttonEl = document.createElement('button');
+                buttonEl.textContent = btn.text;
+                buttonEl.className = btn.class;
+                buttonEl.onclick = () => {
+                    hideModal();
+                    if (modalResolve) modalResolve(btn.value);
+                };
+                modalButtons.appendChild(buttonEl);
+            });
+            modal.classList.remove('hidden');
+            return new Promise(resolve => {
+                modalResolve = resolve;
+            });
+        };
 
+        const hideModal = () => modal.classList.add('hidden');
+
+        const showAlert = (title, message) => showModal(title, message, [
+            { text: '確定', value: true, class: 'bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700' }
+        ]);
+
+        const showConfirm = (title, message) => showModal(title, message, [
+            { text: '取消', value: false, class: 'bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-400' },
+            { text: '確定', value: true, class: 'bg-red-600 text-white font-bold py-2 px-4 rounded-md hover:bg-red-700' }
+        ]);
+        
+        // --- State Management ---
+        const debounce = (func, delay) => {
+            let timeout;
+            return (...args) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        };
+
+        const saveState = () => {
+            // Update state from inputs before saving
+            state.settings.communityName = communityNameInput.value;
+            state.settings.eventName = eventNameInput.value;
+            state.settings.eventDate = eventDateInput.value;
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            } catch (error) {
+                console.error("Could not save state to localStorage:", error);
+            }
+        };
+
+        const debouncedSaveState = debounce(saveState, 500);
+
+        const loadState = () => {
+            try {
+                const savedState = localStorage.getItem(STORAGE_KEY);
+                if (savedState) {
+                    const parsedState = JSON.parse(savedState);
+                    // Basic validation to prevent loading corrupted data
+                    if (parsedState.settings && parsedState.polls && parsedState.residents) {
+                        state = parsedState;
+                    }
+                }
+            } catch (error) {
+                console.error("Could not load state from localStorage:", error);
+                localStorage.removeItem(STORAGE_KEY); // Clear corrupted data
+            }
+            
+            // Apply loaded state to UI
+            communityNameInput.value = state.settings.communityName;
+            eventNameInput.value = state.settings.eventName;
+            eventDateInput.value = state.settings.eventDate || new Date().toISOString().split('T')[0];
+
+            if (state.polls.length === 0) {
+                addInitialPoll();
+            } else {
+                renderPolls();
+            }
+            renderResidents();
+        };
 
         // --- Utility Functions ---
-        function escapeHTML(str) {
+        const escapeHTML = (str) => {
             if (typeof str !== 'string') return '';
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-        }
+            return str.replace(/[&<>"']/g, match => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[match]));
+        };
 
         // --- Core Functions ---
-
-        function addInitialData() {
-            // Create initial poll
+        function addInitialPoll() {
             createPoll({
                 sectionTitle: '議題 #1',
                 title: '管理費調整案',
@@ -275,43 +412,38 @@
                     { text: '廢票', qrValue: 'M01-03' }
                 ]
             });
-            renderResidents(); // Render the initial empty state for residents
         }
-
-        function handleCsvImport(event) {
+        
+        async function handleCsvImport(event) {
             const file = event.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 const text = e.target.result;
                 try {
                     const parsedResidents = parseCSV(text);
                     if (parsedResidents.length === 0) {
-                         alert('CSV檔案中沒有可辨識的住戶資料，請確認檔案格式是否正確。');
-                         return;
+                        await showAlert('匯入失敗', 'CSV檔案中沒有可辨識的住戶資料，請確認檔案格式是否正確。');
+                        return;
                     }
-                    residents = parsedResidents; // Replace existing residents
+                    state.residents = parsedResidents;
                     renderResidents();
-                    alert(`成功匯入 ${residents.length} 筆住戶資料！`);
+                    debouncedSaveState();
+                    await showAlert('匯入成功', `成功匯入 ${state.residents.length} 筆住戶資料！`);
                 } catch (error) {
                     console.error("CSV Parsing Error:", error);
-                    alert(`匯入失敗：${error.message}`);
+                    await showAlert('匯入失敗', `發生錯誤：<br><pre class="mt-2 p-2 bg-gray-100 rounded text-sm">${escapeHTML(error.message)}</pre>`);
                 }
             };
-            reader.onerror = () => {
-                alert('讀取檔案時發生錯誤。');
-            };
+            reader.onerror = () => showAlert('錯誤', '讀取檔案時發生錯誤。');
             reader.readAsText(file, "UTF-8");
-            
-            event.target.value = ''; // Reset input for re-uploading the same file
+            event.target.value = ''; // Reset input
         }
 
         function parseCSV(text) {
             const rows = text.split('\n').filter(row => row.trim() !== '');
-            if (rows.length < 2) {
-                throw new Error("CSV檔案至少需要一個標頭行和一行資料。");
-            }
+            if (rows.length < 2) throw new Error("CSV檔案至少需要一個標頭行和一行資料。");
             
             const headerRow = rows[0].trim().startsWith('\uFEFF') ? rows[0].trim().substring(1) : rows[0].trim();
             const headers = headerRow.split(',').map(h => h.replace(/"/g, '').trim());
@@ -343,13 +475,12 @@
             };
 
             if (indices.unit === -1 || indices.name === -1) {
-                throw new Error(`CSV檔案的標頭 (header) 必須包含 "unit" (或 "戶號") 和 "name" (或 "姓名")。`);
+                throw new Error(`CSV檔案的標頭 (header) 必須包含 "戶號" 和 "姓名"。`);
             }
             
             const importedResidents = [];
             for (let i = 1; i < rows.length; i++) {
                 const values = rows[i].trim().split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/"/g, '').trim());
-                
                 const resident = {
                     id: `resident-${i}`,
                     unit: values[indices.unit] || '',
@@ -359,31 +490,31 @@
                     area: indices.area !== -1 ? (values[indices.area] || '') : '',
                     ownership: indices.ownership !== -1 ? (values[indices.ownership] || '') : ''
                 };
-
-                if (resident.unit && resident.name) {
-                    importedResidents.push(resident);
-                }
+                if (resident.unit && resident.name) importedResidents.push(resident);
             }
             return importedResidents;
         }
 
-
-        function clearResidentsList() {
-            if (residents.length > 0 && confirm('您確定要清空目前的住戶列表嗎？')) {
-                residents = [];
-                renderResidents();
+        async function clearResidentsList() {
+            if (state.residents.length > 0) {
+                const confirmed = await showConfirm('清空住戶列表', '您確定要清空目前的住戶列表嗎？此操作無法復原。');
+                if (confirmed) {
+                    state.residents = [];
+                    renderResidents();
+                    debouncedSaveState();
+                }
             }
         }
         
         function createPoll(initialData = {}) {
-            pollIdCounter++;
-            const pollId = `poll-${pollIdCounter}`;
-            const pollNumberStr = String(pollIdCounter).padStart(2, '0');
+            state.pollIdCounter++;
+            const pollId = `poll-${state.pollIdCounter}`;
+            const pollNumberStr = String(state.pollIdCounter).padStart(2, '0');
             
             const pollData = {
                 id: pollId,
-                sectionTitle: initialData.sectionTitle || `議題 #${pollIdCounter}`,
-                title: initialData.title || `新投票 ${pollIdCounter}`,
+                sectionTitle: initialData.sectionTitle || `議題 #${state.pollIdCounter}`,
+                title: initialData.title || `新投票 ${state.pollIdCounter}`,
                 proposer: initialData.proposer || '',
                 description: initialData.description || '',
                 options: initialData.options || [
@@ -391,31 +522,29 @@
                     { text: '不同意', qrValue: `M${pollNumberStr}-02` }
                 ]
             };
-            polls.push(pollData);
+            state.polls.push(pollData);
             renderPolls();
+            debouncedSaveState();
         }
         
         function renderPolls() {
             pollsListContainer.innerHTML = '';
-            polls.forEach((poll) => {
+            state.polls.forEach((poll) => {
                 const pollElement = document.createElement('div');
-                pollElement.className = 'p-4 border border-gray-300 rounded-lg';
+                pollElement.className = 'p-4 border border-gray-300 rounded-lg bg-gray-50';
                 pollElement.dataset.id = poll.id;
 
-                let optionsHTML = '';
-                poll.options.forEach((opt, optIndex) => {
-                    optionsHTML += `
-                        <div class="option-input-group mt-2">
-                            <input type="text" value="${escapeHTML(opt.text)}" class="option-text-input border-gray-300 rounded-md shadow-sm" placeholder="選項文字" data-option-index="${optIndex}">
-                            <input type="text" value="${escapeHTML(opt.qrValue)}" class="option-qr-input border-gray-300 rounded-md shadow-sm" placeholder="自訂QR Code碼" data-option-index="${optIndex}">
-                            <button class="remove-option-btn bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 text-sm" data-option-index="${optIndex}">移除</button>
-                        </div>
-                    `;
-                });
+                const optionsHTML = poll.options.map((opt, optIndex) => `
+                    <div class="option-input-group mt-2">
+                        <input type="text" value="${escapeHTML(opt.text)}" class="option-text-input border-gray-300 rounded-md shadow-sm" placeholder="選項文字" data-option-index="${optIndex}">
+                        <input type="text" value="${escapeHTML(opt.qrValue)}" class="option-qr-input border-gray-300 rounded-md shadow-sm" placeholder="自訂QR Code碼" data-option-index="${optIndex}">
+                        <button class="remove-option-btn bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 text-sm" data-option-index="${optIndex}">移除</button>
+                    </div>
+                `).join('');
 
                 pollElement.innerHTML = `
                     <div class="flex justify-between items-center mb-4">
-                        <input type="text" value="${escapeHTML(poll.sectionTitle)}" class="poll-section-title-input text-lg font-semibold text-gray-800 bg-transparent w-auto focus:bg-gray-100 focus:outline-none rounded px-2 py-1 border border-transparent focus:border-gray-300">
+                        <input type="text" value="${escapeHTML(poll.sectionTitle)}" class="poll-section-title-input text-lg font-semibold text-gray-800 bg-transparent w-auto focus:bg-white focus:outline-none rounded px-2 py-1 border border-transparent focus:border-gray-300">
                         <button class="remove-poll-btn bg-red-500 text-white font-bold py-1 px-3 rounded-md hover:bg-red-600 text-sm">刪除投票</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -429,8 +558,8 @@
                         </div>
                     </div>
                      <div class="mt-4">
-                        <label class="block text-sm font-medium text-gray-700">說明</label>
-                        <textarea class="poll-description-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" rows="2">${escapeHTML(poll.description)}</textarea>
+                         <label class="block text-sm font-medium text-gray-700">說明</label>
+                         <textarea class="poll-description-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" rows="2">${escapeHTML(poll.description)}</textarea>
                     </div>
                     <div class="mt-4">
                         <label class="block text-sm font-medium text-gray-700">投票項目</label>
@@ -440,208 +569,197 @@
                 `;
                 pollsListContainer.appendChild(pollElement);
             });
-            addPollEventListeners();
         }
+        
+        function handlePollsListEvent(e) {
+            const target = e.target;
+            const pollElement = target.closest('[data-id]');
+            if (!pollElement) return;
+            const pollId = pollElement.dataset.id;
+            const poll = state.polls.find(p => p.id === pollId);
+            if (!poll) return;
+            
+            // --- Handle input changes ---
+            if (['change', 'input'].includes(e.type) && target.matches('input, textarea')) {
+                if (target.classList.contains('poll-section-title-input')) poll.sectionTitle = target.value;
+                else if (target.classList.contains('poll-title-input')) poll.title = target.value;
+                else if (target.classList.contains('poll-proposer-input')) poll.proposer = target.value;
+                else if (target.classList.contains('poll-description-input')) poll.description = target.value;
+                else if (target.matches('.option-text-input, .option-qr-input')) {
+                    const optionIndex = parseInt(target.dataset.optionIndex, 10);
+                    const property = target.classList.contains('option-text-input') ? 'text' : 'qrValue';
+                    poll.options[optionIndex][property] = target.value;
+                }
+                debouncedSaveState();
+            }
 
-        function addPollEventListeners() {
-            document.querySelectorAll('.poll-section-title-input, .poll-title-input, .poll-proposer-input, .poll-description-input').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    const pollId = e.target.closest('[data-id]').dataset.id;
-                    const poll = polls.find(p => p.id === pollId);
-                    if (!poll) return;
-
-                    if (e.target.classList.contains('poll-section-title-input')) poll.sectionTitle = e.target.value;
-                    else if (e.target.classList.contains('poll-title-input')) poll.title = e.target.value;
-                    else if (e.target.classList.contains('poll-proposer-input')) poll.proposer = e.target.value;
-                    else if (e.target.classList.contains('poll-description-input')) poll.description = e.target.value;
-                });
-            });
-
-            document.querySelectorAll('.remove-poll-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const pollId = e.target.closest('[data-id]').dataset.id;
-                    polls = polls.filter(p => p.id !== pollId);
-                    renderPolls();
-                });
-            });
-
-            document.querySelectorAll('.add-option-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const pollId = e.target.closest('[data-id]').dataset.id;
-                    const poll = polls.find(p => p.id === pollId);
-                    if (!poll) return;
+            // --- Handle button clicks ---
+            if (e.type === 'click') {
+                if (target.classList.contains('remove-poll-btn')) {
+                    state.polls = state.polls.filter(p => p.id !== pollId);
+                    renderPolls(); // Re-render to remove the element and re-attach listeners
+                    debouncedSaveState();
+                } else if (target.classList.contains('add-option-btn')) {
                     const pollNumber = parseInt(poll.id.split('-')[1], 10);
                     const pollNumberStr = String(pollNumber).padStart(2, '0');
                     const newIndex = poll.options.length + 1;
                     const newOptionNumberStr = String(newIndex).padStart(2, '0');
                     poll.options.push({ text: '', qrValue: `M${pollNumberStr}-${newOptionNumberStr}` });
                     renderPolls();
-                });
-            });
-            
-            document.querySelectorAll('.remove-option-btn').forEach(btn => {
-                 btn.addEventListener('click', (e) => {
-                    const pollId = e.target.closest('[data-id]').dataset.id;
-                    const optionIndex = parseInt(e.target.dataset.optionIndex, 10);
-                    const poll = polls.find(p => p.id === pollId);
-                    if (poll) {
-                        poll.options.splice(optionIndex, 1);
-                        renderPolls();
-                    }
-                });
-            });
-
-            document.querySelectorAll('.option-text-input, .option-qr-input').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    const pollId = e.target.closest('[data-id]').dataset.id;
-                    const optionIndex = parseInt(e.target.dataset.optionIndex, 10);
-                    const poll = polls.find(p => p.id === pollId);
-                    if (!poll || !poll.options[optionIndex]) return;
-                    const property = e.target.classList.contains('option-text-input') ? 'text' : 'qrValue';
-                    poll.options[optionIndex][property] = e.target.value;
-                });
-            });
+                    debouncedSaveState();
+                } else if (target.classList.contains('remove-option-btn')) {
+                    const optionIndex = parseInt(target.dataset.optionIndex, 10);
+                    poll.options.splice(optionIndex, 1);
+                    renderPolls();
+                    debouncedSaveState();
+                }
+            }
         }
-        
+
         function renderResidents() {
             residentsListTbody.innerHTML = '';
-             if (residents.length === 0) {
-                residentsListTbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-gray-500">請從CSV檔案匯入住戶資料。</td></tr>`;
-            } else {
-                residents.forEach((res, index) => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td class="p-3">
-                            <input type="checkbox" class="resident-checkbox h-4 w-4 text-red-600 border-gray-300 rounded" data-resident-id="${res.id}">
-                        </td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-900">${index + 1}</td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.qrcodeValue)}</td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.unit)}</td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.name)}</td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.address)}</td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.area)}</td>
-                        <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.ownership)}</td>
-                    `;
-                    residentsListTbody.appendChild(tr);
-                });
-            }
-            selectAllResidentsCheckbox.checked = false;
+             if (state.residents.length === 0) {
+                 residentsListTbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-gray-500">請從CSV檔案匯入住戶資料。</td></tr>`;
+             } else {
+                 state.residents.forEach((res, index) => {
+                     const tr = document.createElement('tr');
+                     tr.className = 'hover:bg-gray-50';
+                     tr.innerHTML = `
+                         <td class="p-3"><input type="checkbox" class="resident-checkbox h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500" data-resident-id="${res.id}"></td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-900">${index + 1}</td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.qrcodeValue)}</td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.unit)}</td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.name)}</td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.address)}</td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.area)}</td>
+                         <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.ownership)}</td>
+                     `;
+                     residentsListTbody.appendChild(tr);
+                 });
+             }
+             updateResidentCounts();
+             selectAllResidentsCheckbox.checked = false;
+        }
+
+        function updateResidentCounts() {
+            const total = state.residents.length;
+            const selected = document.querySelectorAll('.resident-checkbox:checked').length;
+            totalResidentsCountSpan.textContent = total;
+            selectedResidentsCountSpan.textContent = selected;
+            selectAllResidentsCheckbox.disabled = total === 0;
+        }
+        
+        function handleDownloadSampleCsv() {
+            const csvContent = 'data:text/csv;charset=utf-8,\uFEFF'
+                + 'qrcodeValue,unit,name,address,area,ownership\n'
+                + '"A001","A-01","王大明","幸福路一段1號1樓","25.5","0.05"\n'
+                + '"A002","A-02","陳小美","幸福路一段1號2樓","30.1","0.07"\n';
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "sample_residents.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         async function generateAndPrintSlips() {
             const printArea = document.getElementById('print-area');
-            if (!printArea) {
-                console.error("Print area not found!");
-                return;
-            }
+            if (!printArea) return;
             
+            const selectedResidentIds = Array.from(document.querySelectorAll('.resident-checkbox:checked')).map(cb => cb.dataset.residentId);
+            if (selectedResidentIds.length === 0) {
+                return showAlert('無法產生', '請至少選擇一位住戶來列印投票單。');
+            }
+            if (state.polls.length === 0) {
+                return showAlert('無法產生', '請先建立至少一個投票項目。');
+            }
+
             loader.classList.remove('hidden');
 
-            // Use setTimeout to allow the loader to render before starting heavy work
             setTimeout(() => {
                 try {
-                    const selectedResidentIds = Array.from(document.querySelectorAll('.resident-checkbox:checked')).map(cb => cb.dataset.residentId);
-                    
-                    if (selectedResidentIds.length === 0) {
-                        alert('請至少選擇一位住戶來列印投票單。');
-                        loader.classList.add('hidden');
-                        return;
-                    }
-
-                    if (polls.length === 0) {
-                        alert('請先建立至少一個投票項目。');
-                        loader.classList.add('hidden');
-                        return;
-                    }
-
-                    const selectedResidents = residents.filter(res => selectedResidentIds.includes(res.id));
-                    const communityName = communityNameInput.value;
-                    const eventName = eventNameInput.value;
-                    const eventDate = eventDateInput.value ? new Date(eventDateInput.value) : new Date();
+                    const selectedResidents = state.residents.filter(res => selectedResidentIds.includes(res.id));
+                    const eventDate = new Date(state.settings.eventDate);
                     const formattedDate = `投票日期 : ${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月${eventDate.getDate()}日`;
-
-                    let allPagesHTML = '';
-
-                    selectedResidents.forEach((resident, residentIdx) => {
-                        const residentIndexInFullList = residents.findIndex(r => r.id === resident.id);
+                    
+                    const allPagesHTML = selectedResidents.map((resident) => {
+                        const residentIndexInFullList = state.residents.findIndex(r => r.id === resident.id);
                         const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
                         
-                        let residentContentHTML = `
-                            <div class="print-header">
-                                <h1>${escapeHTML(communityName)}</h1>
-                                <h2>${escapeHTML(eventName)} 投票單</h2>
-                                <p>${escapeHTML(formattedDate)}</p>
-                            </div>
-                        `;
-                        
-                        polls.forEach((poll) => {
-                            let optionsHTML = '';
-                            poll.options.forEach((option, optIndex) => {
+                        const residentContentHTML = state.polls.map((poll) => {
+                            const optionsHTML = poll.options.map((option, optIndex) => {
                                 const finalQrCodeValue = `${residentPrefix}${option.qrValue}`;
-                                const qrData = finalQrCodeValue;
-                                const escapedQrData = escapeHTML(qrData);
-
-                                optionsHTML += `
+                                const escapedQrData = escapeHTML(finalQrCodeValue);
+                                return `
                                     <div class="option-item">
                                         <div class="option-qr-code" id="qr-${resident.id}-${poll.id}-${optIndex}" data-qr-content="${escapedQrData}"></div>
                                         <span class="option-text">${escapeHTML(option.text)} (　　)</span>
                                     </div>`;
-                            });
+                            }).join('');
 
-                            residentContentHTML += `
+                            return `
                                 <div class="poll-container">
                                     <h3 class="poll-title">${escapeHTML(poll.sectionTitle)}</h3>
                                     <div class="poll-details">
                                         <strong>主旨：</strong>${escapeHTML(poll.title)}<br>
-                                        <strong>說明：</strong>${escapeHTML(poll.description)}<br>
+                                        <strong>說明：</strong>${escapeHTML(poll.description).replace(/\n/g, '<br>')}<br>
                                         <strong>提案人：</strong>${escapeHTML(poll.proposer)}
                                     </div>
                                     <div class="options-grid">${optionsHTML}</div>
                                 </div>
                             `;
-                        });
+                        }).join('');
 
-                        allPagesHTML += `
+                        return `
                             <div class="resident-print-container">
-                                <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
-                                ${residentContentHTML}
+                                <table class="print-table">
+                                    <thead>
+                                        <tr>
+                                            <td>
+                                                <div class="print-header-wrapper">
+                                                    <div class="print-header">
+                                                        <h1>${escapeHTML(state.settings.communityName)}</h1>
+                                                        <h2>${escapeHTML(state.settings.eventName)} 投票單</h2>
+                                                        <p>${escapeHTML(formattedDate)}</p>
+                                                    </div>
+                                                    <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>
+                                                ${residentContentHTML}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         `;
-
-                        // Add a blank page after each resident, except the last one
-                        if (residentIdx < selectedResidents.length - 1) {
-                            allPagesHTML += '<div class="blank-page"></div>';
-                        }
-                    });
-
+                    }).join('');
+                    
                     printArea.innerHTML = allPagesHTML;
                     
-                    const qrPromises = [];
-                    const qrElements = printArea.querySelectorAll('.option-qr-code');
-                    
-                    qrElements.forEach(el => {
-                        const promise = new Promise((resolve) => {
-                            try {
-                                const content = el.dataset.qrContent;
-                                if (content && content.trim() !== '') {
-                                    new QRCode(el, {
-                                        text: content,
-                                        width: 80,
-                                        height: 80,
-                                        correctLevel: QRCode.CorrectLevel.M
-                                    });
-                                } else {
-                                   el.innerHTML = '<span style="color: red; font-size: 9px;">無 QR 碼內容</span>';
+                    const qrPromises = Array.from(printArea.querySelectorAll('.option-qr-code')).map(el => 
+                        new Promise((resolve) => {
+                            setTimeout(() => { // Yield to main thread for each QR code
+                                try {
+                                    const content = el.dataset.qrContent;
+                                    if (content && content.trim() !== '') {
+                                        new QRCode(el, { text: content, width: 80, height: 80, correctLevel: QRCode.CorrectLevel.M });
+                                    } else {
+                                        el.innerHTML = '<span class="text-red-500 text-xs">無QR碼</span>';
+                                    }
+                                } catch (e) {
+                                    console.error("QR Code generation failed:", el.dataset.qrContent, e);
+                                    el.innerHTML = '<span class="text-red-500 text-xs">錯誤</span>';
                                 }
-                            } catch (e) {
-                                console.error("無法產生 QR Code:", el.dataset.qrContent, e);
-                                el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
-                            }
-                            // Give browser a moment to render the QR code
-                            setTimeout(resolve, 0);
-                        });
-                        qrPromises.push(promise);
-                    });
+                                resolve();
+                            }, 0);
+                        })
+                    );
                     
                     Promise.all(qrPromises).then(() => {
                         document.body.classList.add('printing');
@@ -649,8 +767,8 @@
                     });
 
                 } catch (error) {
-                    console.error("產生列印內容時發生錯誤:", error);
-                    alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
+                    console.error("Error generating print content:", error);
+                    showAlert("產生錯誤", "產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
                     loader.classList.add('hidden');
                 } finally {
                     const afterPrintHandler = () => {
@@ -661,8 +779,40 @@
                     };
                     window.addEventListener('afterprint', afterPrintHandler, { once: true });
                 }
-            }, 100); // 100ms timeout to show loader
+            }, 100);
         }
+
+        // --- Event Listeners ---
+        document.querySelectorAll('#community-name, #event-name, #event-date').forEach(input => {
+            input.addEventListener('change', debouncedSaveState);
+        });
+        addPollBtn.addEventListener('click', () => createPoll());
+        pollsListContainer.addEventListener('change', handlePollsListEvent);
+        pollsListContainer.addEventListener('click', handlePollsListEvent);
+        pollsListContainer.addEventListener('input', handlePollsListEvent);
+
+        importCsvBtn.addEventListener('click', () => importCsvInput.click());
+        importCsvInput.addEventListener('change', handleCsvImport);
+        clearResidentsBtn.addEventListener('click', clearResidentsList);
+        downloadSampleCsvBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleDownloadSampleCsv();
+        });
+
+        selectAllResidentsCheckbox.addEventListener('change', (e) => {
+            document.querySelectorAll('.resident-checkbox').forEach(cb => cb.checked = e.target.checked);
+            updateResidentCounts();
+        });
+        residentsListTbody.addEventListener('change', (e) => {
+            if (e.target.classList.contains('resident-checkbox')) {
+                updateResidentCounts();
+            }
+        });
+
+        generatePrintBtn.addEventListener('click', generateAndPrintSlips);
+
+        // --- Initial Load ---
+        loadState();
     });
     </script>
 </body>
