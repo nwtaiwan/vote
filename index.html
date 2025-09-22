@@ -41,20 +41,21 @@
             }
 
             /* Hide the main application UI when printing */
-            #app {
+            #app, #loader {
                 display: none !important;
             }
 
-            .print-page {
+            .resident-print-container {
                 page-break-after: always;
                 position: relative;
-                width: 19cm; /* A4 width - 2cm margins */
-                height: 27.7cm; /* A4 height - 2cm margins */
-                box-sizing: border-box;
             }
 
-            .print-page:last-child {
-                page-break-after: avoid;
+            .poll-container {
+                page-break-inside: avoid; /* Prevent polls from splitting across pages */
+                margin-top: 1.5rem;
+                border: 1px solid #666;
+                padding: 0.75rem;
+                border-radius: 5px;
             }
             
             .print-header {
@@ -72,13 +73,6 @@
                 right: 0;
                 font-size: 14pt;
                 font-weight: bold;
-            }
-
-            .poll-container {
-                margin-top: 1.5rem;
-                border: 1px solid #666;
-                padding: 0.75rem;
-                border-radius: 5px;
             }
             
             .poll-title {
@@ -105,6 +99,7 @@
                 flex-direction: column;
                 align-items: center;
                 text-align: center;
+                page-break-inside: avoid;
             }
             
             .option-qr-code {
@@ -202,6 +197,12 @@
         </section>
 
     </div>
+    
+    <!-- Loading Spinner -->
+    <div id="loader" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 flex items-center justify-center">
+        <div class="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-white"></div>
+        <span class="ml-4 text-white text-xl">正在產生投票單...</span>
+    </div>
 
     <!-- This div is used for printing and is not visible on screen -->
     <div id="print-area" class="hidden"></div>
@@ -223,6 +224,7 @@
         const selectAllResidentsCheckbox = document.getElementById('select-all-residents');
 
         const generatePrintBtn = document.getElementById('generate-print-btn');
+        const loader = document.getElementById('loader');
         
         // --- Data State ---
         let polls = [];
@@ -519,138 +521,152 @@
             selectAllResidentsCheckbox.checked = false;
         }
 
-        function generateAndPrintSlips() {
+        async function generateAndPrintSlips() {
             const printArea = document.getElementById('print-area');
             if (!printArea) {
                 console.error("Print area not found!");
                 return;
             }
+            
+            loader.classList.remove('hidden');
 
-            try {
-                const selectedResidentIds = Array.from(document.querySelectorAll('.resident-checkbox:checked')).map(cb => cb.dataset.residentId);
-                
-                if (selectedResidentIds.length === 0) {
-                    alert('請至少選擇一位住戶來列印投票單。');
-                    return;
-                }
-
-                if (polls.length === 0) {
-                    alert('請先建立至少一個投票項目。');
-                    return;
-                }
-
-                const selectedResidents = residents.filter(res => selectedResidentIds.includes(res.id));
-                const communityName = communityNameInput.value;
-                const eventName = eventNameInput.value;
-                const eventDate = eventDateInput.value ? new Date(eventDateInput.value) : new Date();
-                const formattedDate = `投票日期 : ${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月${eventDate.getDate()}日`;
-
-                let allPagesHTML = '';
-
-                selectedResidents.forEach((resident, residentIdx) => {
-                    const residentIndexInFullList = residents.findIndex(r => r.id === resident.id);
-                    const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
+            // Use setTimeout to allow the loader to render before starting heavy work
+            setTimeout(() => {
+                try {
+                    const selectedResidentIds = Array.from(document.querySelectorAll('.resident-checkbox:checked')).map(cb => cb.dataset.residentId);
                     
-                    let residentContentHTML = '';
-                    
-                    polls.forEach((poll) => {
-                        let optionsHTML = '';
-                        poll.options.forEach((option, optIndex) => {
-                            const finalQrCodeValue = `${residentPrefix}${option.qrValue}`;
-                            const qrData = finalQrCodeValue;
-                            const escapedQrData = escapeHTML(qrData);
+                    if (selectedResidentIds.length === 0) {
+                        alert('請至少選擇一位住戶來列印投票單。');
+                        return;
+                    }
 
-                            optionsHTML += `
-                                <div class="option-item">
-                                    <div class="option-qr-code" id="qr-${resident.id}-${poll.id}-${optIndex}" data-qr-content="${escapedQrData}"></div>
-                                    <span class="option-text">${escapeHTML(option.text)} (　　)</span>
-                                </div>`;
-                        });
+                    if (polls.length === 0) {
+                        alert('請先建立至少一個投票項目。');
+                        return;
+                    }
 
-                        residentContentHTML += `
-                            <div class="poll-container">
-                                <h3 class="poll-title">${escapeHTML(poll.sectionTitle)}</h3>
-                                <div class="poll-details">
-                                    <strong>主旨：</strong>${escapeHTML(poll.title)}<br>
-                                    <strong>說明：</strong>${escapeHTML(poll.description)}<br>
-                                    <strong>提案人：</strong>${escapeHTML(poll.proposer)}
-                                </div>
-                                <div class="options-grid">${optionsHTML}</div>
-                            </div>
-                        `;
-                    });
+                    const selectedResidents = residents.filter(res => selectedResidentIds.includes(res.id));
+                    const communityName = communityNameInput.value;
+                    const eventName = eventNameInput.value;
+                    const eventDate = eventDateInput.value ? new Date(eventDateInput.value) : new Date();
+                    const formattedDate = `投票日期 : ${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月${eventDate.getDate()}日`;
 
-                    allPagesHTML += `
-                        <div class="print-page">
-                            <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
+                    let allPagesHTML = '';
+
+                    selectedResidents.forEach((resident, residentIdx) => {
+                        const residentIndexInFullList = residents.findIndex(r => r.id === resident.id);
+                        const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
+                        
+                        let residentContentHTML = `
                             <div class="print-header">
                                 <h1>${escapeHTML(communityName)}</h1>
                                 <h2>${escapeHTML(eventName)} 投票單</h2>
                                 <p>${escapeHTML(formattedDate)}</p>
                             </div>
-                            ${residentContentHTML}
-                        </div>
-                    `;
+                        `;
+                        
+                        polls.forEach((poll) => {
+                            let optionsHTML = '';
+                            poll.options.forEach((option, optIndex) => {
+                                const finalQrCodeValue = `${residentPrefix}${option.qrValue}`;
+                                const qrData = finalQrCodeValue;
+                                const escapedQrData = escapeHTML(qrData);
 
-                    // Add a blank page after each resident, except the last one
-                    if (residentIdx < selectedResidents.length - 1) {
-                        allPagesHTML += '<div class="blank-page"></div>';
-                    }
-                });
-
-                printArea.innerHTML = allPagesHTML;
-                
-                const qrElements = printArea.querySelectorAll('.option-qr-code');
-                qrElements.forEach(el => {
-                    try {
-                        const content = el.dataset.qrContent;
-                        if (content && content.trim() !== '') {
-                            new QRCode(el, {
-                                text: content,
-                                width: 80,
-                                height: 80,
-                                correctLevel: QRCode.CorrectLevel.M
+                                optionsHTML += `
+                                    <div class="option-item">
+                                        <div class="option-qr-code" id="qr-${resident.id}-${poll.id}-${optIndex}" data-qr-content="${escapedQrData}"></div>
+                                        <span class="option-text">${escapeHTML(option.text)} (　　)</span>
+                                    </div>`;
                             });
-                        } else {
-                           el.innerHTML = '<span style="color: red; font-size: 9px;">無 QR 碼內容</span>';
+
+                            residentContentHTML += `
+                                <div class="poll-container">
+                                    <h3 class="poll-title">${escapeHTML(poll.sectionTitle)}</h3>
+                                    <div class="poll-details">
+                                        <strong>主旨：</strong>${escapeHTML(poll.title)}<br>
+                                        <strong>說明：</strong>${escapeHTML(poll.description)}<br>
+                                        <strong>提案人：</strong>${escapeHTML(poll.proposer)}
+                                    </div>
+                                    <div class="options-grid">${optionsHTML}</div>
+                                </div>
+                            `;
+                        });
+
+                        allPagesHTML += `
+                            <div class="resident-print-container">
+                                <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
+                                ${residentContentHTML}
+                            </div>
+                        `;
+
+                        // Add a blank page after each resident, except the last one
+                        if (residentIdx < selectedResidents.length - 1) {
+                            allPagesHTML += '<div class="blank-page"></div>';
                         }
-                    } catch (e) {
-                        console.error("無法產生 QR Code:", el.dataset.qrContent, e);
-                        el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
-                    }
-                });
-                
-                // Use a temporary iframe to print to avoid showing content on the main page
-                const iframe = document.createElement('iframe');
-                iframe.style.position = 'absolute';
-                iframe.style.width = '0';
-                iframe.style.height = '0';
-                iframe.style.border = '0';
-                document.body.appendChild(iframe);
+                    });
 
-                const pri = iframe.contentWindow;
-                pri.document.open();
-                pri.document.write(document.head.innerHTML); // copy styles
-                pri.document.write('</head><body onload="window.print()">');
-                pri.document.write(printArea.innerHTML);
-                pri.document.write('</body></html>');
-                pri.document.close();
-                
-                // Clean up the iframe after printing
-                iframe.onload = () => {
-                     setTimeout(() => {
-                         document.body.removeChild(iframe);
-                     }, 1000); // delay to ensure print dialog opens
-                };
+                    printArea.innerHTML = allPagesHTML;
+                    
+                    const qrElements = printArea.querySelectorAll('.option-qr-code');
+                    qrElements.forEach(el => {
+                        try {
+                            const content = el.dataset.qrContent;
+                            if (content && content.trim() !== '') {
+                                new QRCode(el, {
+                                    text: content,
+                                    width: 80,
+                                    height: 80,
+                                    correctLevel: QRCode.CorrectLevel.M
+                                });
+                            } else {
+                               el.innerHTML = '<span style="color: red; font-size: 9px;">無 QR 碼內容</span>';
+                            }
+                        } catch (e) {
+                            console.error("無法產生 QR Code:", el.dataset.qrContent, e);
+                            el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
+                        }
+                    });
+                    
+                    const iframe = document.createElement('iframe');
+                    iframe.style.position = 'absolute';
+                    iframe.style.width = '0';
+                    iframe.style.height = '0';
+                    iframe.style.border = '0';
+                    document.body.appendChild(iframe);
+
+                    const pri = iframe.contentWindow;
+                    pri.document.open();
+                    const styles = Array.from(document.styleSheets)
+                        .map(styleSheet => {
+                            try {
+                                return Array.from(styleSheet.cssRules).map(rule => rule.cssText).join('');
+                            } catch (e) {
+                                return '';
+                            }
+                        }).join('\n');
+
+                    pri.document.write('<html><head><style>' + styles + '</style></head><body>');
+                    pri.document.write(printArea.innerHTML);
+                    pri.document.write('</body></html>');
+                    pri.document.close();
+                    
+                    iframe.onload = () => {
+                        pri.focus();
+                        pri.print();
+                        setTimeout(() => {
+                             document.body.removeChild(iframe);
+                        }, 500); 
+                    };
 
 
-            } catch (error) {
-                console.error("產生列印內容時發生錯誤:", error);
-                alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
-            } finally {
-                 // Clear the on-page print area immediately
-                printArea.innerHTML = '';
-            }
+                } catch (error) {
+                    console.error("產生列印內容時發生錯誤:", error);
+                    alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
+                } finally {
+                    loader.classList.add('hidden');
+                    printArea.innerHTML = '';
+                }
+            }, 100); // 100ms timeout
         }
     });
     </script>
