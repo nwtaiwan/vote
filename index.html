@@ -25,6 +25,14 @@
             gap: 0.5rem;
             align-items: center;
         }
+        
+        body.printing #app, body.printing #loader {
+            display: none;
+        }
+        
+        body:not(.printing) #print-area {
+            display: none;
+        }
 
         /* --- Print Specific Styles --- */
         @media print {
@@ -33,22 +41,15 @@
                 margin: 1cm;
             }
 
-            body > *:not(#print-area) {
-                display: none !important;
-            }
-
-            #print-area, #print-area * {
-                visibility: visible;
-            }
-            #print-area {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
 
             .resident-print-container {
                 page-break-after: always;
+                position: relative;
+                min-height: 27.7cm; /* Ensure it takes full page height */
             }
             
             .poll-container {
@@ -69,9 +70,9 @@
             .print-header p { text-align: right; margin: 0.5rem 0 0 0; }
 
             .resident-unit-header {
-                position: fixed; /* Use fixed to repeat on every page */
-                top: 1cm;
-                right: 1cm;
+                position: fixed;
+                top: 0.5cm;
+                right: 0.5cm;
                 font-size: 14pt;
                 font-weight: bold;
             }
@@ -107,6 +108,10 @@
                 width: 80px;
                 height: 80px;
                 margin-bottom: 0.5rem;
+            }
+            .option-qr-code img, .option-qr-code canvas {
+                width: 100% !important;
+                height: 100% !important;
             }
 
             .option-text {
@@ -560,6 +565,7 @@
                         const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
                         
                         let residentContentHTML = `
+                            <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
                             <div class="print-header">
                                 <h1>${escapeHTML(communityName)}</h1>
                                 <h2>${escapeHTML(eventName)} 投票單</h2>
@@ -596,10 +602,7 @@
 
                         allPagesHTML += `
                             <div class="resident-print-container">
-                                <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
-                                <div class="print-page-content">
-                                    ${residentContentHTML}
-                                </div>
+                                ${residentContentHTML}
                             </div>
                         `;
 
@@ -631,47 +634,25 @@
                         }
                     });
                     
-                    // Use a temporary iframe to print to avoid showing content on the main page
-                    const iframe = document.createElement('iframe');
-                    iframe.style.position = 'absolute';
-                    iframe.style.width = '0';
-                    iframe.style.height = '0';
-                    iframe.style.border = '0';
-                    document.body.appendChild(iframe);
+                    document.body.classList.add('printing');
 
-                    const pri = iframe.contentWindow;
-                    pri.document.open();
-                    const styles = Array.from(document.styleSheets)
-                        .map(styleSheet => {
-                            try {
-                                return Array.from(styleSheet.cssRules).map(rule => rule.cssText).join('');
-                            } catch (e) {
-                                return '';
-                            }
-                        }).join('\n');
-
-                    pri.document.write('<html><head><style>' + styles + '</style></head><body>');
-                    pri.document.write(printArea.innerHTML);
-                    pri.document.write('</body></html>');
-                    pri.document.close();
-                    
-                    iframe.onload = () => {
-                        pri.focus();
-                        pri.print();
-                        setTimeout(() => {
-                             document.body.removeChild(iframe);
-                        }, 500); 
-                    };
-
+                    // Allow time for QR codes to render before printing
+                    setTimeout(() => {
+                        window.print();
+                        document.body.classList.remove('printing');
+                    }, 500); // 500ms delay for rendering
 
                 } catch (error) {
                     console.error("產生列印內容時發生錯誤:", error);
                     alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
                 } finally {
-                    loader.classList.add('hidden');
-                    printArea.innerHTML = '';
+                    // This now runs before print dialog is even closed, so we move cleanup
+                    setTimeout(() => {
+                        loader.classList.add('hidden');
+                        printArea.innerHTML = '';
+                    }, 1000);
                 }
-            }, 100); // 100ms timeout
+            }, 100); // 100ms timeout to show loader
         }
     });
     </script>
