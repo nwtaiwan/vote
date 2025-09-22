@@ -6,6 +6,7 @@
     <title>QR Code 投票單產生器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -42,6 +43,12 @@
             border-bottom-color: #ef4444; /* red-500 */
         }
         
+        #reader {
+            border: 2px dashed #cbd5e1;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
         /* --- Hide/Show Logic for Printing --- */
         body.printing #app, body.printing #loader, body.printing #custom-modal {
             visibility: hidden;
@@ -198,8 +205,9 @@
 
         <!-- Tabs -->
         <div class="bg-white rounded-lg shadow-md p-2">
-            <nav id="tabs" class="flex items-center justify-center">
+            <nav id="tabs" class="flex items-center justify-center flex-wrap">
                 <button data-tab="settings-panel" class="tab-button active">投票單設定</button>
+                <button data-tab="scanner-voting-panel" class="tab-button">掃碼投票</button>
                 <button data-tab="status-panel" class="tab-button">即時投票狀況</button>
             </nav>
         </div>
@@ -285,6 +293,33 @@
             </section>
         </div>
 
+        <div id="scanner-voting-panel" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-lg font-semibold mb-4">攝影機掃描</h3>
+                    <div class="flex gap-4 mb-4">
+                        <button id="start-vote-scan-btn" class="w-full bg-green-500 text-white font-bold py-2 px-4 rounded-md hover:bg-green-600 disabled:bg-gray-400">開始掃碼</button>
+                        <button id="stop-vote-scan-btn" class="w-full bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 disabled:bg-gray-400" disabled>停止掃碼</button>
+                    </div>
+                    <div id="vote-reader" class="w-full aspect-square bg-gray-100 flex items-center justify-center">
+                        <p id="vote-reader-placeholder" class="text-gray-500">請點擊 "開始掃碼"</p>
+                    </div>
+                    <div id="scanner-vote-status" class="mt-4 text-center font-semibold p-3 rounded-md">&nbsp;</div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-lg font-semibold mb-4">掃碼槍/手動輸入</h3>
+                    <form id="scan-gun-vote-form" class="mb-4">
+                        <label for="scan-gun-vote-input" class="sr-only">QR Code</label>
+                        <input type="text" id="scan-gun-vote-input" placeholder="將游標點擊此處後開始掃碼..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
+                    </form>
+                    <h4 class="font-semibold mb-2">最近投票紀錄：</h4>
+                    <ul id="scanner-recent-votes-list" class="space-y-2 max-h-80 overflow-y-auto">
+                        <li class="text-gray-500 text-center">掃碼紀錄將顯示於此</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
         <div id="status-panel" class="hidden">
             <!-- Voting Status will be rendered here -->
         </div>
@@ -332,10 +367,20 @@
         const tabsContainer = document.getElementById('tabs');
         const settingsPanel = document.getElementById('settings-panel');
         const statusPanel = document.getElementById('status-panel');
+        const scannerVotingPanel = document.getElementById('scanner-voting-panel');
         const modal = document.getElementById('custom-modal');
         const modalTitle = document.getElementById('modal-title');
         const modalBody = document.getElementById('modal-body');
         const modalButtons = document.getElementById('modal-buttons');
+
+        // --- Scanner Voting Elements ---
+        const startVoteScanBtn = document.getElementById('start-vote-scan-btn');
+        const stopVoteScanBtn = document.getElementById('stop-vote-scan-btn');
+        const voteReaderPlaceholder = document.getElementById('vote-reader-placeholder');
+        const scanGunVoteForm = document.getElementById('scan-gun-vote-form');
+        const scanGunVoteInput = document.getElementById('scan-gun-vote-input');
+        const scannerVoteStatus = document.getElementById('scanner-vote-status');
+        const scannerRecentVotesList = document.getElementById('scanner-recent-votes-list');
 
         // --- Data State ---
         const STORAGE_KEY = 'qrVoteGeneratorState';
@@ -350,6 +395,7 @@
             votes: {}, // { residentId: { pollId: qrValue } }
             pollIdCounter: 0,
         };
+        let html5QrCode = null;
 
         // --- Modal Logic ---
         let modalResolve = null;
@@ -444,6 +490,14 @@
             if (typeof str !== 'string') return '';
             return str.replace(/[&<>"']/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[match]));
         };
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-TW';
+                speechSynthesis.speak(utterance);
+            }
+        }
 
         // --- Core Functions ---
         function addInitialPoll() {
@@ -812,17 +866,23 @@
             }, 100);
         }
 
+        // --- Tabs & Panels ---
         function switchTab(targetTab) {
+            stopVoteScanner(); // Stop scanner when switching tabs
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
             document.querySelector(`[data-tab="${targetTab}"]`).classList.add('active');
             
-            if (targetTab === 'settings-panel') {
-                settingsPanel.classList.remove('hidden');
-                statusPanel.classList.add('hidden');
-            } else {
-                settingsPanel.classList.add('hidden');
-                statusPanel.classList.remove('hidden');
-                renderVotingStatus();
+            [settingsPanel, statusPanel, scannerVotingPanel].forEach(panel => {
+                if (panel.id === targetTab) {
+                    panel.classList.remove('hidden');
+                } else {
+                    panel.classList.add('hidden');
+                }
+            });
+
+            if (targetTab === 'status-panel') renderVotingStatus();
+            if (targetTab === 'scanner-voting-panel') {
+                setTimeout(() => scanGunVoteInput.focus(), 100);
             }
         }
 
@@ -903,6 +963,7 @@
             });
         }
 
+        // --- Manual & Scanned Voting ---
         function showManualVoteModal(residentId) {
             const resident = state.residents.find(r => r.id === residentId);
             if (!resident) return;
@@ -941,6 +1002,10 @@
                     if (!state.votes[residentId]) {
                         state.votes[residentId] = {};
                     }
+                    // Clear previous votes for this resident for all polls before setting new ones
+                    // to handle cases where a radio is unchecked
+                    state.polls.forEach(p => delete state.votes[residentId][p.id]);
+
                     for (let [pollId, qrValue] of formData.entries()) {
                         state.votes[residentId][pollId] = qrValue;
                     }
@@ -950,6 +1015,120 @@
                     hideModal();
                 }
             });
+        }
+        
+        // --- Scanner Voting Logic ---
+        function startVoteScanner() {
+            if (!html5QrCode) html5QrCode = new Html5Qrcode("vote-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
+            
+            voteReaderPlaceholder.classList.add('hidden');
+            html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => handleVoteScan(decodedText, '攝影機'))
+                .then(() => {
+                    startVoteScanBtn.disabled = true;
+                    stopVoteScanBtn.disabled = false;
+                })
+                .catch(err => {
+                    scannerVoteStatus.textContent = '無法啟動攝影機。請確認權限。';
+                    scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
+                    voteReaderPlaceholder.classList.remove('hidden');
+                });
+        }
+
+        function stopVoteScanner() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop()
+                    .then(() => {
+                        startVoteScanBtn.disabled = false;
+                        stopVoteScanBtn.disabled = true;
+                        voteReaderPlaceholder.classList.remove('hidden');
+                        scannerVoteStatus.innerHTML = '&nbsp;';
+                        scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md';
+                    })
+                    .catch(err => console.log("QR vote scanner stop failed.", err));
+            }
+        }
+        
+        let lastVoteScanTime = 0, lastScannedVoteCode = null;
+        function handleVoteScan(decodedText, method) {
+            const now = Date.now();
+            if (now - lastVoteScanTime < 3000 && lastScannedVoteCode === decodedText) return;
+            lastVoteScanTime = now;
+            lastScannedVoteCode = decodedText;
+
+            const residentCodeMatch = decodedText.match(/^A(\d{3})/);
+            if (!residentCodeMatch) {
+                scannerVoteStatus.textContent = '無效的投票 QR Code 格式。';
+                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
+                speak("無效的QR code");
+                return;
+            }
+
+            const residentIndex = parseInt(residentCodeMatch[1], 10) - 1;
+            const optionQrValue = decodedText.substring(4);
+            const resident = state.residents[residentIndex];
+
+            if (!resident) {
+                scannerVoteStatus.textContent = `無效的住戶編號: ${residentCodeMatch[0]}`;
+                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
+                speak("無效的住戶");
+                return;
+            }
+
+            let targetPoll = null, targetOption = null;
+            for (const poll of state.polls) {
+                const foundOption = poll.options.find(opt => opt.qrValue === optionQrValue);
+                if (foundOption) {
+                    targetPoll = poll;
+                    targetOption = foundOption;
+                    break;
+                }
+            }
+
+            if (!targetPoll || !targetOption) {
+                scannerVoteStatus.textContent = `無效的投票選項: ${optionQrValue}`;
+                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
+                speak("無效的選項");
+                return;
+            }
+            
+            // Record vote
+            if (!state.votes[resident.id]) state.votes[resident.id] = {};
+            
+            const isRepeatVote = state.votes[resident.id][targetPoll.id] === targetOption.qrValue;
+
+            state.votes[resident.id][targetPoll.id] = targetOption.qrValue;
+            saveState(); // Immediate save for responsiveness
+
+            const feedbackMsg = `${resident.unit} ${resident.name} 投給 "${targetPoll.title}" - "${targetOption.text}"`;
+            if(isRepeatVote) {
+                 scannerVoteStatus.textContent = `重複投票: ${feedbackMsg}`;
+                 scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-yellow-100 text-yellow-800';
+                 speak("重複投票");
+            } else {
+                 scannerVoteStatus.textContent = `投票成功: ${feedbackMsg}`;
+                 scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-green-100 text-green-800';
+                 speak("投票成功");
+            }
+            
+            // Update UI
+            updateRecentVotesList(resident, targetPoll, targetOption, method);
+            renderResidents(); // To update the button in the residents list
+        }
+
+        function updateRecentVotesList(resident, poll, option, method) {
+             if (scannerRecentVotesList.children.length > 0 && scannerRecentVotesList.children[0].textContent.includes('顯示於此')) {
+                 scannerRecentVotesList.innerHTML = '';
+             }
+             const li = document.createElement('li');
+             li.className = 'p-2 bg-gray-50 rounded-md';
+             const time = new Date().toLocaleTimeString('zh-TW');
+             li.innerHTML = `<div><span class="font-bold">${resident.unit} ${resident.name}</span> - ${time}</div>
+                             <div class="text-sm text-gray-600 pl-2">投給 "${poll.title}" - "${option.text}" (${method})</div>`;
+             scannerRecentVotesList.insertBefore(li, scannerRecentVotesList.firstChild);
+             if (scannerRecentVotesList.children.length > 20) {
+                 scannerRecentVotesList.removeChild(scannerRecentVotesList.lastChild);
+             }
         }
 
         // --- Event Listeners ---
@@ -984,6 +1163,18 @@
         });
 
         generatePrintBtn.addEventListener('click', generateAndPrintSlips);
+        
+        // Scanner Voting listeners
+        startVoteScanBtn.addEventListener('click', startVoteScanner);
+        stopVoteScanBtn.addEventListener('click', stopVoteScanner);
+        scanGunVoteForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const code = scanGunVoteInput.value.trim();
+            if (code) {
+                handleVoteScan(code, '掃碼槍');
+                scanGunVoteInput.value = '';
+            }
+        });
 
         // --- Initial Load ---
         loadState();
