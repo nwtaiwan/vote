@@ -1059,18 +1059,26 @@
             lastVoteScanTime = now;
             lastScannedVoteCode = decodedText;
 
-            const delimiter = 'M';
-            const delimiterIndex = decodedText.indexOf(delimiter);
+            // Use a regex to robustly find the option code at the end of the string
+            const voteOptionRegex = /(M\d{2}-\d{2})$/;
+            const match = decodedText.match(voteOptionRegex);
 
-            if (delimiterIndex === -1 || delimiterIndex === 0) {
-                scannerVoteStatus.textContent = '無效的投票 QR Code 格式。';
+            if (!match) {
+                scannerVoteStatus.textContent = '無效的投票 QR Code 格式 (找不到選項碼)。';
                 scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
                 speak("無效的QR code");
                 return;
             }
+
+            const optionQrValue = match[0]; // e.g., "M01-01"
+            const residentIdentifier = decodedText.substring(0, decodedText.length - optionQrValue.length);
             
-            const residentIdentifier = decodedText.substring(0, delimiterIndex);
-            const optionQrValue = decodedText.substring(delimiterIndex);
+            if (!residentIdentifier) {
+                scannerVoteStatus.textContent = '無效的投票 QR Code 格式 (找不到住戶碼)。';
+                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
+                speak("無效的QR code");
+                return;
+            }
 
             // Find resident by qrcodeValue (from CSV) first, then by unit number
             let resident = state.residents.find(r => r.qrcodeValue && r.qrcodeValue === residentIdentifier);
