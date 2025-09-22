@@ -761,8 +761,11 @@
                     const formattedDate = `投票日期 : ${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月${eventDate.getDate()}日`;
                     
                     const allPagesHTML = selectedResidents.map((resident) => {
-                        const residentIndexInFullList = state.residents.findIndex(r => r.id === resident.id);
-                        const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
+                        const residentPrefix = resident.qrcodeValue || resident.unit;
+                        if (!residentPrefix) {
+                            console.error(`住戶 ${resident.name} (${resident.unit}) 沒有 'qrcodeValue' 或 '戶號'，無法為其產生 QR Code。`);
+                            return ''; // Skip this resident if they have no identifier
+                        }
                         
                         const residentContentHTML = state.polls.map((poll) => {
                             const optionsHTML = poll.options.map((option, optIndex) => {
@@ -1056,20 +1059,27 @@
             lastVoteScanTime = now;
             lastScannedVoteCode = decodedText;
 
-            const residentCodeMatch = decodedText.match(/^A(\d{3})/);
-            if (!residentCodeMatch) {
+            const delimiter = 'M';
+            const delimiterIndex = decodedText.indexOf(delimiter);
+
+            if (delimiterIndex === -1 || delimiterIndex === 0) {
                 scannerVoteStatus.textContent = '無效的投票 QR Code 格式。';
                 scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
                 speak("無效的QR code");
                 return;
             }
+            
+            const residentIdentifier = decodedText.substring(0, delimiterIndex);
+            const optionQrValue = decodedText.substring(delimiterIndex);
 
-            const residentIndex = parseInt(residentCodeMatch[1], 10) - 1;
-            const optionQrValue = decodedText.substring(4);
-            const resident = state.residents[residentIndex];
+            // Find resident by qrcodeValue (from CSV) first, then by unit number
+            let resident = state.residents.find(r => r.qrcodeValue && r.qrcodeValue === residentIdentifier);
+            if (!resident) {
+                resident = state.residents.find(r => r.unit && r.unit === residentIdentifier);
+            }
 
             if (!resident) {
-                scannerVoteStatus.textContent = `無效的住戶編號: ${residentCodeMatch[0]}`;
+                scannerVoteStatus.textContent = `無效的住戶識別碼: ${escapeHTML(residentIdentifier)}`;
                 scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
                 speak("無效的住戶");
                 return;
