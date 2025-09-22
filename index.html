@@ -66,6 +66,7 @@
             body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+                counter-reset: page;
             }
             
             #app, #loader, #custom-modal {
@@ -143,6 +144,19 @@
             }
             .print-table thead {
                 display: table-header-group;
+            }
+            .print-table tfoot {
+                display: table-footer-group;
+            }
+            .print-footer {
+                text-align: center;
+                padding-top: 1em;
+                font-size: 10pt;
+                color: #666;
+            }
+            .print-footer::after {
+                counter-increment: page;
+                content: "第 " counter(page) " 頁";
             }
             .print-header-wrapper {
                 position: relative;
@@ -735,6 +749,13 @@
                                             </td>
                                         </tr>
                                     </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td>
+                                                <div class="print-footer"></div>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         `;
