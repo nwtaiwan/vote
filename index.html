@@ -31,6 +31,16 @@
             gap: 0.5rem;
             align-items: center;
         }
+        .tab-button {
+            padding: 0.5rem 1.5rem;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease-in-out;
+        }
+        .tab-button.active {
+            color: #b91c1c; /* red-700 */
+            border-bottom-color: #ef4444; /* red-500 */
+        }
         
         /* --- Hide/Show Logic for Printing --- */
         body.printing #app, body.printing #loader, body.printing #custom-modal {
@@ -66,7 +76,6 @@
             body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
-                counter-reset: page;
             }
             
             #app, #loader, #custom-modal {
@@ -78,9 +87,12 @@
             }
 
             .resident-print-container {
-                page-break-after: always;
+                page-break-before: always;
+                counter-reset: page;
                 /* position: relative; /* No longer needed here */
-                min-height: 27.7cm; /* A4 height minus margins */
+            }
+            .resident-print-container:first-child {
+                page-break-before: auto;
             }
             
             .poll-container {
@@ -182,85 +194,100 @@
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <!-- Main Application UI (will be hidden on print) -->
     <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
 
-        <!-- 1. Settings Section -->
-        <section class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="section-header">基本設定</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="community-name" class="block text-sm font-medium text-gray-700">社區名稱</label>
-                    <input type="text" id="community-name" value="西北社區" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                </div>
-                <div>
-                    <label for="event-name" class="block text-sm font-medium text-gray-700">會議活動名稱</label>
-                    <input type="text" id="event-name" value="113年度區分所有權人會議" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                </div>
-                <div>
-                    <label for="event-date" class="block text-sm font-medium text-gray-700">投票日期</label>
-                    <input type="date" id="event-date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
-                </div>
-            </div>
-        </section>
+        <!-- Tabs -->
+        <div class="bg-white rounded-lg shadow-md p-2">
+            <nav id="tabs" class="flex items-center justify-center">
+                <button data-tab="settings-panel" class="tab-button active">投票單設定</button>
+                <button data-tab="status-panel" class="tab-button">即時投票狀況</button>
+            </nav>
+        </div>
 
-        <!-- 2. Polls Management Section -->
-        <section class="bg-white p-6 rounded-lg shadow-md">
-            <div class="flex justify-between items-center">
-                <h2 class="section-header">投票議題管理</h2>
-                <button id="add-poll-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">新增投票</button>
-            </div>
-            <div id="polls-list" class="mt-4 space-y-4">
-                <!-- Polls will be dynamically inserted here -->
-            </div>
-        </section>
-        
-        <!-- 3. Residents List Section -->
-        <section class="bg-white p-6 rounded-lg shadow-md">
-             <div class="flex flex-wrap justify-between items-center gap-4">
-                 <h2 class="section-header">匯入住戶列表</h2>
-                 <div class="flex items-center gap-2">
-                     <input type="file" id="import-csv-input" class="hidden" accept=".csv,text/csv">
-                     <button id="import-csv-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">從CSV匯入</button>
-                     <button id="clear-residents-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors">清空列表</button>
+        <!-- Panels -->
+        <div id="settings-panel">
+            <!-- 1. Settings Section -->
+            <section class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="section-header">基本設定</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="community-name" class="block text-sm font-medium text-gray-700">社區名稱</label>
+                        <input type="text" id="community-name" value="西北社區" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="event-name" class="block text-sm font-medium text-gray-700">會議活動名稱</label>
+                        <input type="text" id="event-name" value="113年度區分所有權人會議" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label for="event-date" class="block text-sm font-medium text-gray-700">投票日期</label>
+                        <input type="date" id="event-date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Polls Management Section -->
+            <section class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <div class="flex justify-between items-center">
+                    <h2 class="section-header">投票議題管理</h2>
+                    <button id="add-poll-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">新增投票</button>
+                </div>
+                <div id="polls-list" class="mt-4 space-y-4">
+                    <!-- Polls will be dynamically inserted here -->
+                </div>
+            </section>
+            
+            <!-- 3. Residents List Section -->
+            <section class="bg-white p-6 rounded-lg shadow-md mb-8">
+                 <div class="flex flex-wrap justify-between items-center gap-4">
+                     <h2 class="section-header">住戶列表</h2>
+                     <div class="flex items-center gap-2">
+                         <input type="file" id="import-csv-input" class="hidden" accept=".csv,text/csv">
+                         <button id="import-csv-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">從CSV匯入</button>
+                         <button id="clear-residents-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors">清空列表</button>
+                     </div>
                  </div>
-             </div>
-             <p class="text-sm text-gray-600 mt-2">
-                 請從「西北社區QR Code報到系統」的住戶管理頁面，點擊「匯出CSV」按鈕，然後將下載的檔案從這裡匯入。
-                 <a href="#" id="download-sample-csv" class="text-blue-600 hover:underline">下載範例CSV檔</a>
-             </p>
-             <div class="mt-2 text-sm font-medium text-gray-700">
-                已選擇 <span id="selected-residents-count" class="font-bold text-red-600">0</span> / <span id="total-residents-count" class="font-bold">0</span> 位住戶
-            </div>
-             <div class="mt-4 overflow-x-auto max-h-96">
-                 <table class="min-w-full divide-y divide-gray-200">
-                     <thead class="bg-gray-50 sticky top-0 z-10">
-                         <tr>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
-                                 <input type="checkbox" id="select-all-residents" class="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
-                             </th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">序號</th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">戶號</th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地址</th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">坪數</th>
-                             <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">區分權比例</th>
-                         </tr>
-                     </thead>
-                     <tbody id="residents-list" class="bg-white divide-y divide-gray-200">
-                         <!-- Residents will be dynamically inserted here -->
-                     </tbody>
-                 </table>
-             </div>
-        </section>
+                 <p class="text-sm text-gray-600 mt-2">
+                     請從「西北社區QR Code報到系統」的住戶管理頁面，點擊「匯出CSV」按鈕，然後將下載的檔案從這裡匯入。
+                     <a href="#" id="download-sample-csv" class="text-blue-600 hover:underline">下載範例CSV檔</a>
+                 </p>
+                 <div class="mt-2 text-sm font-medium text-gray-700">
+                    已選擇 <span id="selected-residents-count" class="font-bold text-red-600">0</span> / <span id="total-residents-count" class="font-bold">0</span> 位住戶
+                </div>
+                 <div class="mt-4 overflow-x-auto max-h-96">
+                     <table class="min-w-full divide-y divide-gray-200">
+                         <thead class="bg-gray-50 sticky top-0 z-10">
+                             <tr>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                                     <input type="checkbox" id="select-all-residents" class="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                                 </th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">序號</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">戶號</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地址</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">坪數</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">區分權比例</th>
+                                 <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">手動投票</th>
+                             </tr>
+                         </thead>
+                         <tbody id="residents-list" class="bg-white divide-y divide-gray-200">
+                             <!-- Residents will be dynamically inserted here -->
+                         </tbody>
+                     </table>
+                 </div>
+            </section>
 
-        <!-- 4. Action Button -->
-        <section class="text-center">
-            <button id="generate-print-btn" class="bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:bg-red-700 text-xl transition-transform transform hover:scale-105">
-                列印投票單
-            </button>
-        </section>
+            <!-- 4. Action Button -->
+            <section class="text-center">
+                <button id="generate-print-btn" class="bg-red-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:bg-red-700 text-xl transition-transform transform hover:scale-105">
+                    列印投票單
+                </button>
+            </section>
+        </div>
+
+        <div id="status-panel" class="hidden">
+            <!-- Voting Status will be rendered here -->
+        </div>
 
     </div>
     
@@ -272,9 +299,9 @@
 
     <!-- Custom Modal -->
     <div id="custom-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center p-4">
-        <div id="modal-content" class="bg-white rounded-lg shadow-xl p-6 w-11/12 md:max-w-md mx-auto">
+        <div id="modal-content" class="bg-white rounded-lg shadow-xl p-6 w-11/12 md:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <h3 id="modal-title" class="text-lg font-bold text-gray-800"></h3>
-            <p id="modal-message" class="mt-2 text-sm text-gray-600"></p>
+            <div id="modal-body" class="mt-2 text-sm text-gray-600"></div>
             <div id="modal-buttons" class="mt-6 flex justify-end space-x-3">
                 <!-- Buttons will be injected here -->
             </div>
@@ -302,9 +329,12 @@
         const selectedResidentsCountSpan = document.getElementById('selected-residents-count');
         const totalResidentsCountSpan = document.getElementById('total-residents-count');
         const loader = document.getElementById('loader');
+        const tabsContainer = document.getElementById('tabs');
+        const settingsPanel = document.getElementById('settings-panel');
+        const statusPanel = document.getElementById('status-panel');
         const modal = document.getElementById('custom-modal');
         const modalTitle = document.getElementById('modal-title');
-        const modalMessage = document.getElementById('modal-message');
+        const modalBody = document.getElementById('modal-body');
         const modalButtons = document.getElementById('modal-buttons');
 
         // --- Data State ---
@@ -317,22 +347,31 @@
             },
             polls: [],
             residents: [],
+            votes: {}, // { residentId: { pollId: qrValue } }
             pollIdCounter: 0,
         };
 
         // --- Modal Logic ---
         let modalResolve = null;
 
-        const showModal = (title, message, buttons) => {
+        const showModal = (title, content, buttons) => {
             modalTitle.textContent = title;
-            modalMessage.innerHTML = message; // Use innerHTML to allow simple formatting
+            modalBody.innerHTML = '';
+            if (typeof content === 'string') {
+                const p = document.createElement('p');
+                p.innerHTML = content;
+                modalBody.appendChild(p);
+            } else {
+                modalBody.appendChild(content);
+            }
             modalButtons.innerHTML = '';
             buttons.forEach(btn => {
                 const buttonEl = document.createElement('button');
                 buttonEl.textContent = btn.text;
                 buttonEl.className = btn.class;
                 buttonEl.onclick = () => {
-                    hideModal();
+                    // Don't hide for submit, let the handler do it
+                    if (btn.value !== 'submit') hideModal();
                     if (modalResolve) modalResolve(btn.value);
                 };
                 modalButtons.appendChild(buttonEl);
@@ -364,7 +403,6 @@
         };
 
         const saveState = () => {
-            // Update state from inputs before saving
             state.settings.communityName = communityNameInput.value;
             state.settings.eventName = eventNameInput.value;
             state.settings.eventDate = eventDateInput.value;
@@ -382,35 +420,29 @@
                 const savedState = localStorage.getItem(STORAGE_KEY);
                 if (savedState) {
                     const parsedState = JSON.parse(savedState);
-                    // Basic validation to prevent loading corrupted data
                     if (parsedState.settings && parsedState.polls && parsedState.residents) {
-                        state = parsedState;
+                        state = { ...state, ...parsedState };
+                        if (!state.votes) state.votes = {}; // Ensure votes object exists
                     }
                 }
             } catch (error) {
                 console.error("Could not load state from localStorage:", error);
-                localStorage.removeItem(STORAGE_KEY); // Clear corrupted data
+                localStorage.removeItem(STORAGE_KEY);
             }
             
-            // Apply loaded state to UI
             communityNameInput.value = state.settings.communityName;
             eventNameInput.value = state.settings.eventName;
             eventDateInput.value = state.settings.eventDate || new Date().toISOString().split('T')[0];
 
-            if (state.polls.length === 0) {
-                addInitialPoll();
-            } else {
-                renderPolls();
-            }
+            if (state.polls.length === 0) addInitialPoll();
+            else renderPolls();
             renderResidents();
         };
 
         // --- Utility Functions ---
         const escapeHTML = (str) => {
             if (typeof str !== 'string') return '';
-            return str.replace(/[&<>"']/g, match => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            }[match]));
+            return str.replace(/[&<>"']/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[match]));
         };
 
         // --- Core Functions ---
@@ -420,11 +452,7 @@
                 title: '管理費調整案',
                 proposer: '管理委員會',
                 description: '為提升社區服務品質，擬調整管理費...',
-                options: [
-                    { text: '同意', qrValue: 'M01-01' },
-                    { text: '不同意', qrValue: 'M01-02' },
-                    { text: '廢票', qrValue: 'M01-03' }
-                ]
+                options: [ { text: '同意', qrValue: 'M01-01' }, { text: '不同意', qrValue: 'M01-02' }, { text: '廢票', qrValue: 'M01-03' } ]
             });
         }
         
@@ -438,7 +466,7 @@
                 try {
                     const parsedResidents = parseCSV(text);
                     if (parsedResidents.length === 0) {
-                        await showAlert('匯入失敗', 'CSV檔案中沒有可辨識的住戶資料，請確認檔案格式是否正確。');
+                        await showAlert('匯入失敗', 'CSV檔案中沒有可辨識的住戶資料...');
                         return;
                     }
                     state.residents = parsedResidents;
@@ -447,12 +475,12 @@
                     await showAlert('匯入成功', `成功匯入 ${state.residents.length} 筆住戶資料！`);
                 } catch (error) {
                     console.error("CSV Parsing Error:", error);
-                    await showAlert('匯入失敗', `發生錯誤：<br><pre class="mt-2 p-2 bg-gray-100 rounded text-sm">${escapeHTML(error.message)}</pre>`);
+                    await showAlert('匯入失敗', `發生錯誤...`);
                 }
             };
             reader.onerror = () => showAlert('錯誤', '讀取檔案時發生錯誤。');
             reader.readAsText(file, "UTF-8");
-            event.target.value = ''; // Reset input
+            event.target.value = '';
         }
 
         function parseCSV(text) {
@@ -463,14 +491,9 @@
             const headers = headerRow.split(',').map(h => h.replace(/"/g, '').trim());
 
             const headerMap = {
-                qrcodeValue: ['qrcodeValue', 'QR Code', 'QR Code碼'],
-                unit: ['unit', '戶號'],
-                name: ['name', '姓名'],
-                address: ['address', '住址', '地址'],
-                area: ['area', '坪數'],
-                ownership: ['ownership', '區分權(%)', '區分權比例']
+                qrcodeValue: ['qrcodeValue', 'QR Code', 'QR Code碼'], unit: ['unit', '戶號'], name: ['name', '姓名'],
+                address: ['address', '住址', '地址'], area: ['area', '坪數'], ownership: ['ownership', '區分權(%)', '區分權比例']
             };
-
             const findIndex = (possibleNames) => {
                 for (const name of possibleNames) {
                     const index = headers.indexOf(name);
@@ -478,27 +501,17 @@
                 }
                 return -1;
             };
-
             const indices = {
-                qrcodeValue: findIndex(headerMap.qrcodeValue),
-                unit: findIndex(headerMap.unit),
-                name: findIndex(headerMap.name),
-                address: findIndex(headerMap.address),
-                area: findIndex(headerMap.area),
-                ownership: findIndex(headerMap.ownership)
+                qrcodeValue: findIndex(headerMap.qrcodeValue), unit: findIndex(headerMap.unit), name: findIndex(headerMap.name),
+                address: findIndex(headerMap.address), area: findIndex(headerMap.area), ownership: findIndex(headerMap.ownership)
             };
-
-            if (indices.unit === -1 || indices.name === -1) {
-                throw new Error(`CSV檔案的標頭 (header) 必須包含 "戶號" 和 "姓名"。`);
-            }
+            if (indices.unit === -1 || indices.name === -1) throw new Error(`CSV檔案的標頭 (header) 必須包含 "戶號" 和 "姓名"。`);
             
             const importedResidents = [];
             for (let i = 1; i < rows.length; i++) {
                 const values = rows[i].trim().split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/"/g, '').trim());
                 const resident = {
-                    id: `resident-${i}`,
-                    unit: values[indices.unit] || '',
-                    name: values[indices.name] || '',
+                    id: `resident-${i}`, unit: values[indices.unit] || '', name: values[indices.name] || '',
                     qrcodeValue: indices.qrcodeValue !== -1 ? (values[indices.qrcodeValue] || '') : '',
                     address: indices.address !== -1 ? (values[indices.address] || '') : '',
                     area: indices.area !== -1 ? (values[indices.area] || '') : '',
@@ -511,9 +524,9 @@
 
         async function clearResidentsList() {
             if (state.residents.length > 0) {
-                const confirmed = await showConfirm('清空住戶列表', '您確定要清空目前的住戶列表嗎？此操作無法復原。');
-                if (confirmed) {
+                if (await showConfirm('清空住戶列表', '您確定要清空目前的住戶列表嗎？此操作無法復原。')) {
                     state.residents = [];
+                    state.votes = {};
                     renderResidents();
                     debouncedSaveState();
                 }
@@ -524,17 +537,11 @@
             state.pollIdCounter++;
             const pollId = `poll-${state.pollIdCounter}`;
             const pollNumberStr = String(state.pollIdCounter).padStart(2, '0');
-            
             const pollData = {
-                id: pollId,
-                sectionTitle: initialData.sectionTitle || `議題 #${state.pollIdCounter}`,
-                title: initialData.title || `新投票 ${state.pollIdCounter}`,
-                proposer: initialData.proposer || '',
+                id: pollId, sectionTitle: initialData.sectionTitle || `議題 #${state.pollIdCounter}`,
+                title: initialData.title || `新投票 ${state.pollIdCounter}`, proposer: initialData.proposer || '',
                 description: initialData.description || '',
-                options: initialData.options || [
-                    { text: '同意', qrValue: `M${pollNumberStr}-01` },
-                    { text: '不同意', qrValue: `M${pollNumberStr}-02` }
-                ]
+                options: initialData.options || [ { text: '同意', qrValue: `M${pollNumberStr}-01` }, { text: '不同意', qrValue: `M${pollNumberStr}-02` } ]
             };
             state.polls.push(pollData);
             renderPolls();
@@ -633,11 +640,12 @@
         function renderResidents() {
             residentsListTbody.innerHTML = '';
              if (state.residents.length === 0) {
-                 residentsListTbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-gray-500">請從CSV檔案匯入住戶資料。</td></tr>`;
+                 residentsListTbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">請從CSV檔案匯入住戶資料。</td></tr>`;
              } else {
                  state.residents.forEach((res, index) => {
                      const tr = document.createElement('tr');
                      tr.className = 'hover:bg-gray-50';
+                     const hasVoted = state.votes[res.id] && Object.keys(state.votes[res.id]).length > 0;
                      tr.innerHTML = `
                          <td class="p-3"><input type="checkbox" class="resident-checkbox h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500" data-resident-id="${res.id}"></td>
                          <td class="p-3 whitespace-nowrap text-sm text-gray-900">${index + 1}</td>
@@ -647,6 +655,7 @@
                          <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.address)}</td>
                          <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.area)}</td>
                          <td class="p-3 whitespace-nowrap text-sm text-gray-500">${escapeHTML(res.ownership)}</td>
+                         <td class="p-3 whitespace-nowrap text-sm"><button data-resident-id="${res.id}" class="manual-vote-btn ${hasVoted ? 'bg-green-600' : 'bg-yellow-500'} text-white text-xs font-bold py-1 px-2 rounded hover:opacity-80">${hasVoted ? '編輯投票' : '尚未投票'}</button></td>
                      `;
                      residentsListTbody.appendChild(tr);
                  });
@@ -803,10 +812,154 @@
             }, 100);
         }
 
+        function switchTab(targetTab) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-tab="${targetTab}"]`).classList.add('active');
+            
+            if (targetTab === 'settings-panel') {
+                settingsPanel.classList.remove('hidden');
+                statusPanel.classList.add('hidden');
+            } else {
+                settingsPanel.classList.add('hidden');
+                statusPanel.classList.remove('hidden');
+                renderVotingStatus();
+            }
+        }
+
+        function renderVotingStatus() {
+            statusPanel.innerHTML = ''; // Clear previous content
+
+            const totalResidents = state.residents.length;
+            const votedResidentsCount = Object.keys(state.votes).filter(residentId => 
+                state.votes[residentId] && Object.keys(state.votes[residentId]).length > 0
+            ).length;
+            const participation = totalResidents > 0 ? (votedResidentsCount / totalResidents * 100).toFixed(1) : 0;
+
+            let summaryHTML = `
+                <section class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="section-header">總覽</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div>
+                            <p class="text-3xl font-bold text-blue-600">${totalResidents}</p>
+                            <p class="text-sm text-gray-500">總戶數</p>
+                        </div>
+                        <div>
+                            <p class="text-3xl font-bold text-green-600">${votedResidentsCount}</p>
+                            <p class="text-sm text-gray-500">已投票戶數</p>
+                        </div>
+                        <div>
+                            <p class="text-3xl font-bold text-red-600">${totalResidents - votedResidentsCount}</p>
+                            <p class="text-sm text-gray-500">未投票戶數</p>
+                        </div>
+                        <div>
+                            <p class="text-3xl font-bold text-purple-600">${participation}%</p>
+                            <p class="text-sm text-gray-500">投票率</p>
+                        </div>
+                    </div>
+                </section>
+            `;
+            statusPanel.innerHTML += summaryHTML;
+
+            state.polls.forEach(poll => {
+                const pollResults = {};
+                poll.options.forEach(opt => pollResults[opt.qrValue] = 0);
+                
+                let totalVotesForPoll = 0;
+                Object.values(state.votes).forEach(residentVotes => {
+                    if (residentVotes[poll.id]) {
+                        const voteValue = residentVotes[poll.id];
+                        if (pollResults.hasOwnProperty(voteValue)) {
+                            pollResults[voteValue]++;
+                        }
+                        totalVotesForPoll++;
+                    }
+                });
+
+                let pollHTML = `
+                    <section class="bg-white p-6 rounded-lg shadow-md mb-8">
+                        <h3 class="text-xl font-bold text-gray-800">${escapeHTML(poll.sectionTitle)}: ${escapeHTML(poll.title)}</h3>
+                        <p class="text-sm text-gray-500 mb-4">總投票數: ${totalVotesForPoll}</p>
+                        <div class="space-y-3">
+                `;
+
+                poll.options.forEach(option => {
+                    const votes = pollResults[option.qrValue];
+                    const percentage = totalVotesForPoll > 0 ? (votes / totalVotesForPoll * 100).toFixed(1) : 0;
+                    pollHTML += `
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-base font-medium text-gray-700">${escapeHTML(option.text)}</span>
+                                <span class="text-sm font-medium text-gray-700">${votes} 票 (${percentage}%)</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-4">
+                                <div class="bg-red-500 h-4 rounded-full" style="width: ${percentage}%"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                pollHTML += '</div></section>';
+                statusPanel.innerHTML += pollHTML;
+            });
+        }
+
+        function showManualVoteModal(residentId) {
+            const resident = state.residents.find(r => r.id === residentId);
+            if (!resident) return;
+
+            const residentVotes = state.votes[residentId] || {};
+            
+            const formContent = document.createElement('form');
+            formContent.id = 'manual-vote-form';
+            let formHTML = `<p class="mb-4">正在為 <strong>${escapeHTML(resident.unit)} ${escapeHTML(resident.name)}</strong> 進行手動投票。</p>`;
+
+            state.polls.forEach(poll => {
+                formHTML += `<fieldset class="mb-4 p-3 border rounded">
+                    <legend class="font-semibold px-2">${escapeHTML(poll.sectionTitle)}: ${escapeHTML(poll.title)}</legend>
+                    <div class="space-y-2 mt-2">
+                `;
+                const currentVote = residentVotes[poll.id];
+                poll.options.forEach(option => {
+                    const isChecked = currentVote === option.qrValue;
+                    formHTML += `
+                        <label class="flex items-center p-2 rounded hover:bg-gray-100 cursor-pointer">
+                            <input type="radio" name="${poll.id}" value="${option.qrValue}" class="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500" ${isChecked ? 'checked' : ''}>
+                            <span class="ml-3 text-gray-700">${escapeHTML(option.text)}</span>
+                        </label>
+                    `;
+                });
+                formHTML += `</div></fieldset>`;
+            });
+            formContent.innerHTML = formHTML;
+
+            showModal('手動投票', formContent, [
+                { text: '取消', value: 'cancel', class: 'bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-400' },
+                { text: '儲存投票', value: 'submit', class: 'bg-red-600 text-white font-bold py-2 px-4 rounded-md hover:bg-red-700' }
+            ]).then(result => {
+                if (result === 'submit') {
+                    const formData = new FormData(document.getElementById('manual-vote-form'));
+                    if (!state.votes[residentId]) {
+                        state.votes[residentId] = {};
+                    }
+                    for (let [pollId, qrValue] of formData.entries()) {
+                        state.votes[residentId][pollId] = qrValue;
+                    }
+                    debouncedSaveState();
+                    renderResidents(); // To update button state
+                    showAlert('成功', '投票已成功儲存！');
+                    hideModal();
+                }
+            });
+        }
+
         // --- Event Listeners ---
-        document.querySelectorAll('#community-name, #event-name, #event-date').forEach(input => {
-            input.addEventListener('change', debouncedSaveState);
+        tabsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-button')) {
+                switchTab(e.target.dataset.tab);
+            }
         });
+
+        document.querySelectorAll('#community-name, #event-name, #event-date').forEach(input => input.addEventListener('change', debouncedSaveState));
         addPollBtn.addEventListener('click', () => createPoll());
         pollsListContainer.addEventListener('change', handlePollsListEvent);
         pollsListContainer.addEventListener('click', handlePollsListEvent);
@@ -815,18 +968,18 @@
         importCsvBtn.addEventListener('click', () => importCsvInput.click());
         importCsvInput.addEventListener('change', handleCsvImport);
         clearResidentsBtn.addEventListener('click', clearResidentsList);
-        downloadSampleCsvBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            handleDownloadSampleCsv();
-        });
+        downloadSampleCsvBtn.addEventListener('click', (e) => { e.preventDefault(); handleDownloadSampleCsv(); });
 
         selectAllResidentsCheckbox.addEventListener('change', (e) => {
             document.querySelectorAll('.resident-checkbox').forEach(cb => cb.checked = e.target.checked);
             updateResidentCounts();
         });
         residentsListTbody.addEventListener('change', (e) => {
-            if (e.target.classList.contains('resident-checkbox')) {
-                updateResidentCounts();
+            if (e.target.classList.contains('resident-checkbox')) updateResidentCounts();
+        });
+        residentsListTbody.addEventListener('click', (e) => {
+            if (e.target.classList.contains('manual-vote-btn')) {
+                showManualVoteModal(e.target.dataset.residentId);
             }
         });
 
