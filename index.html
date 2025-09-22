@@ -33,33 +33,24 @@
                 margin: 1cm;
             }
 
-            body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                background-color: #ffffff !important;
-                margin: 0;
-            }
-
-            /* Hide the main application UI when printing */
-            #app, #loader {
+            body > *:not(#print-area) {
                 display: none !important;
             }
-            
+
+            #print-area, #print-area * {
+                visibility: visible;
+            }
             #print-area {
-                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
             }
 
             .resident-print-container {
                 page-break-after: always;
             }
             
-            .print-page-content {
-                position: relative;
-                width: 19cm; /* A4 width - 2cm margins */
-                min-height: 27.7cm; /* A4 height - 2cm margins */
-                box-sizing: border-box;
-            }
-
             .poll-container {
                 page-break-inside: avoid; /* Prevent polls from splitting across pages */
                 margin-top: 1.5rem;
@@ -124,6 +115,7 @@
             
             .blank-page {
                 page-break-after: always;
+                content: "";
             }
         }
     </style>
@@ -639,6 +631,7 @@
                         }
                     });
                     
+                    // Use a temporary iframe to print to avoid showing content on the main page
                     const iframe = document.createElement('iframe');
                     iframe.style.position = 'absolute';
                     iframe.style.width = '0';
