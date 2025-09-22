@@ -1055,65 +1055,72 @@
         let lastVoteScanTime = 0, lastScannedVoteCode = null;
         function handleVoteScan(decodedText, method) {
             const now = Date.now();
-            if (now - lastVoteScanTime < 3000 && lastScannedVoteCode === decodedText) return;
+            if (now - lastVoteScanTime < 2000 && lastScannedVoteCode === decodedText) return; // Shorten delay slightly
             lastVoteScanTime = now;
             lastScannedVoteCode = decodedText;
 
-            // Trim any whitespace from the scanned code
             const trimmedDecodedText = decodedText.trim();
-
-            // Use a regex to robustly find the option code at the end of the string
-            const voteOptionRegex = /(M\d{2}-\d{2})$/;
-            const match = trimmedDecodedText.match(voteOptionRegex);
-
-            if (!match) {
-                scannerVoteStatus.textContent = '無效的投票 QR Code 格式 (找不到選項碼)。';
-                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
-                speak("無效的QR code");
-                return;
-            }
-
-            const optionQrValue = match[0]; // e.g., "M01-01"
-            const residentIdentifier = trimmedDecodedText.replace(voteOptionRegex, "");
             
-            if (!residentIdentifier) {
-                scannerVoteStatus.textContent = '無效的投票 QR Code 格式 (找不到住戶碼)。';
-                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
-                speak("無效的QR code");
-                return;
-            }
+            let foundResident = null;
+            let foundPoll = null;
+            let foundOption = null;
+            let residentIdentifierFound = '';
 
-            // Find resident by qrcodeValue (from CSV) first, then by unit number
-            let resident = state.residents.find(r => r.qrcodeValue && r.qrcodeValue === residentIdentifier);
-            if (!resident) {
-                resident = state.residents.find(r => r.unit && r.unit === residentIdentifier);
-            }
+            // Sort residents by identifier length (desc) to avoid partial matches, e.g., matching "A1" before "A10"
+            const sortedResidents = [...state.residents].sort((a, b) => {
+                const idA = a.qrcodeValue || a.unit || '';
+                const idB = b.qrcodeValue || b.unit || '';
+                return idB.length - idA.length;
+            });
 
-            if (!resident) {
-                scannerVoteStatus.textContent = `無效的住戶識別碼: ${escapeHTML(residentIdentifier)}`;
-                scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
-                speak("無效的住戶");
-                return;
-            }
+            for (const resident of sortedResidents) {
+                // Check against both qrcodeValue and unit number if they exist
+                const identifiers = [];
+                if (resident.qrcodeValue) identifiers.push(resident.qrcodeValue);
+                if (resident.unit) identifiers.push(resident.unit);
 
-            let targetPoll = null, targetOption = null;
-            for (const poll of state.polls) {
-                const foundOption = poll.options.find(opt => opt.qrValue === optionQrValue);
-                if (foundOption) {
-                    targetPoll = poll;
-                    targetOption = foundOption;
-                    break;
+                for (const residentIdentifier of identifiers) {
+                    if (residentIdentifier && trimmedDecodedText.startsWith(residentIdentifier)) {
+                        const optionQrValue = trimmedDecodedText.substring(residentIdentifier.length);
+                        
+                        // If we found a potential match, check if the remaining part is a valid option
+                        if (optionQrValue) {
+                             for (const poll of state.polls) {
+                                const matchedOption = poll.options.find(opt => opt.qrValue === optionQrValue);
+                                if (matchedOption) {
+                                    foundResident = resident;
+                                    foundPoll = poll;
+                                    foundOption = matchedOption;
+                                    residentIdentifierFound = residentIdentifier;
+                                    break; // Exit poll loop
+                                }
+                            }
+                        }
+                    }
+                    if (foundResident) break; // Exit identifier loop
                 }
+                if (foundResident) break; // Exit resident loop
             }
 
-            if (!targetPoll || !targetOption) {
-                scannerVoteStatus.textContent = `無效的投票選項: ${optionQrValue}`;
+            if (!foundResident || !foundPoll || !foundOption) {
+                // Try to parse to give a better error message
+                const voteOptionRegex = /(M\d{2}-\d{2})$/;
+                const match = trimmedDecodedText.match(voteOptionRegex);
+                let residentPart = trimmedDecodedText;
+                if(match) {
+                    residentPart = trimmedDecodedText.replace(voteOptionRegex, "");
+                }
+                scannerVoteStatus.textContent = `無效的投票 QR Code 或住戶識別碼: ${escapeHTML(residentPart)}`;
                 scannerVoteStatus.className = 'mt-4 text-center font-semibold p-3 rounded-md bg-red-100 text-red-700';
-                speak("無效的選項");
+                speak("無效的QR code");
                 return;
             }
-            
-            // Record vote
+
+            // --- VOTE PROCESSING ---
+            const resident = foundResident;
+            const targetPoll = foundPoll;
+            const targetOption = foundOption;
+
             if (!state.votes[resident.id]) state.votes[resident.id] = {};
             
             const isRepeatVote = state.votes[resident.id][targetPoll.id] === targetOption.qrValue;
