@@ -46,6 +46,10 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
+            
+            #print-area {
+                display: block !important;
+            }
 
             .resident-print-container {
                 page-break-after: always;
@@ -540,11 +544,13 @@
                     
                     if (selectedResidentIds.length === 0) {
                         alert('請至少選擇一位住戶來列印投票單。');
+                        loader.classList.add('hidden');
                         return;
                     }
 
                     if (polls.length === 0) {
                         alert('請先建立至少一個投票項目。');
+                        loader.classList.add('hidden');
                         return;
                     }
 
@@ -561,7 +567,6 @@
                         const residentPrefix = `A${String(residentIndexInFullList + 1).padStart(3, '0')}`;
                         
                         let residentContentHTML = `
-                            <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
                             <div class="print-header">
                                 <h1>${escapeHTML(communityName)}</h1>
                                 <h2>${escapeHTML(eventName)} 投票單</h2>
@@ -598,43 +603,55 @@
 
                         allPagesHTML += `
                             <div class="resident-print-container">
+                                <div class="resident-unit-header">${escapeHTML(resident.unit)}</div>
                                 ${residentContentHTML}
                             </div>
                         `;
+
+                        // Add a blank page after each resident, except the last one
+                        if (residentIdx < selectedResidents.length - 1) {
+                            allPagesHTML += '<div class="blank-page"></div>';
+                        }
                     });
 
                     printArea.innerHTML = allPagesHTML;
                     
+                    const qrPromises = [];
                     const qrElements = printArea.querySelectorAll('.option-qr-code');
+                    
                     qrElements.forEach(el => {
-                        try {
-                            const content = el.dataset.qrContent;
-                            if (content && content.trim() !== '') {
-                                new QRCode(el, {
-                                    text: content,
-                                    width: 80,
-                                    height: 80,
-                                    correctLevel: QRCode.CorrectLevel.M
-                                });
-                            } else {
-                               el.innerHTML = '<span style="color: red; font-size: 9px;">無 QR 碼內容</span>';
+                        const promise = new Promise((resolve) => {
+                            try {
+                                const content = el.dataset.qrContent;
+                                if (content && content.trim() !== '') {
+                                    new QRCode(el, {
+                                        text: content,
+                                        width: 80,
+                                        height: 80,
+                                        correctLevel: QRCode.CorrectLevel.M
+                                    });
+                                } else {
+                                   el.innerHTML = '<span style="color: red; font-size: 9px;">無 QR 碼內容</span>';
+                                }
+                            } catch (e) {
+                                console.error("無法產生 QR Code:", el.dataset.qrContent, e);
+                                el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
                             }
-                        } catch (e) {
-                            console.error("無法產生 QR Code:", el.dataset.qrContent, e);
-                            el.innerHTML = '<span style="color: red; font-size: 9px;">QR 碼錯誤</span>';
-                        }
+                            // Give browser a moment to render the QR code
+                            setTimeout(resolve, 0);
+                        });
+                        qrPromises.push(promise);
                     });
                     
-                    document.body.classList.add('printing');
-
-                    // Allow time for QR codes to render before printing
-                    setTimeout(() => {
+                    Promise.all(qrPromises).then(() => {
+                        document.body.classList.add('printing');
                         window.print();
-                    }, 500); // 500ms delay for rendering
+                    });
 
                 } catch (error) {
                     console.error("產生列印內容時發生錯誤:", error);
                     alert("產生投票單時發生錯誤，請檢查主控台(F12)的錯誤訊息。");
+                    loader.classList.add('hidden');
                 } finally {
                     const afterPrintHandler = () => {
                         document.body.classList.remove('printing');
